@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The GUI and command-line apps should provide easy access to the rosetta cryoem refinement workflow by Frank DiMaio and co.
+The GUI and command-line apps provide easy access to the rosetta cryoem refinement protocol by Frank DiMaio and co. The pipeline automates testing of different parameters, use of reference/starting model restraints (generation with phenix) and selections.
 
 At the moment only the fastrelax protocol based on this tutorial (https://faculty.washington.edu/dimaio/files/rosetta_density_tutorial_aug18_1.pdf) is implemented.
 
@@ -21,7 +21,7 @@ cd /some/directory/
 git clone https://github.com/fmi-basel/RosEM.git
 conda env create --file RosEM/rosem-conda.yml
 conda activate rosem-conda
-cd RosEM-main
+cd RosEM
 python3 setup.py install
 # GUI
 rosemgui.py
@@ -39,11 +39,13 @@ Dependencies
 Qt5
 
 ```
-(git clone https://github.com/fmi-basel/RosEM.git)
-cd RosEM
+cd /some/folder
+git clone https://github.com/fmi-basel/RosEM.git
 python3 -m venv rosem-env
 source rosem-env/bin/activate
+pip install --upgrade pip
 pip install -r RosEM/requirements.txt
+cd RosEM
 python3 setup.py install
 ```
 ## Usage
@@ -57,7 +59,28 @@ rosemgui.py
 
 Command line
 ```
+mkdir some_jobname
+cd some_jobname
 relax.py --help
 ```
 
+By default the pipeline will generate 5 models and select the best based on FSC correlation.
 
+Expected output:
+
+```
+<JOBID>_<JOBNAME>/
+    best_model_w<weight>.pdb
+    (run.sh)
+    job_w<weight>
+    (validation)
+    <JOBID>_<JOBNAME>.log
+    (submit_script)
+```
+
+`best_model_w<weight>.pdb - The best model for a specified density weight based on FSC
+`run.sh` - The command used by GUI to run the pipeline
+`job_w<weight>` - Folder containing rosetta_scripts instructions (*.xml), individual models (*.pdb), rosetta command line scripts (*.sh), and rosetta logfiles (*.pdb)
+`validation` - If validation was requested, the folder contains output from molprobity
+`<JOBID>_<JOBNAME>.log - Logfile from the pipeline
+`submit_script` - If queue submission was used from the GUI, this file contains the submission commands
