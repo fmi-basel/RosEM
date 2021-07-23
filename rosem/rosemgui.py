@@ -1,3 +1,16 @@
+#Copyright 2021 Georg Kempf, Friedrich Miescher Institute for Biomedical Research
+#
+#Licensed under the Apache License, Version 2.0 (the "License");
+#you may not use this file except in compliance with the License.
+#You may obtain a copy of the License at
+#
+#http://www.apache.org/licenses/LICENSE-2.0
+#
+#Unless required by applicable law or agreed to in writing, software
+#distributed under the License is distributed on an "AS IS" BASIS,
+#WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#See the License for the specific language governing permissions and
+#limitations under the License.
 from __future__ import absolute_import
 from rosem import gui_threads
 from rosem.gui_dialogs import message_dlg
@@ -35,9 +48,9 @@ def excepthook(exc_type, exc_value, exc_tb):
     logger.error("Traceback:\n", tb)
 
 def main():
-    upgrade_db()
     shared_objects = [Project(),  FastRelaxParams(), Job(), Validation(), Settings()]
     db = DBHelper(shared_objects)
+    upgrade_db()
     with db.session_scope() as sess:
         db.set_session(sess)
     for obj in shared_objects:
@@ -52,21 +65,7 @@ def upgrade_db():
     logger.debug("Upgrading DB")
     db_path = os.path.join(os.path.expanduser("~"), '.rosem.db')
     engine = create_engine('sqlite:///{}'.format(db_path), connect_args={'check_same_thread': False})
-    stmts = ["ALTER TABLE params RENAME TO fastrelaxparams",
-             "ALTER TABLE fastrelaxparams ADD COLUMN fastrelax BOOLEAN",
-             "ALTER TABLE fastrelaxparams ADD COLUMN norepack BOOLEAN",
-             "ALTER TABLE fastrelaxparams ADD COLUMN bfactor BOOLEAN",
-             "ALTER TABLE fastrelaxparams ADD COLUMN dihedral_cst_weight FLOAT",
-             "ALTER TABLE fastrelaxparams ADD COLUMN distance_cst_weight FLOAT",
-             "ALTER TABLE fastrelaxparams ADD COLUMN bond_cst_weight FLOAT",
-             "ALTER TABLE fastrelaxparams ADD COLUMN angle_cst_weight FLOAT",
-             "ALTER TABLE fastrelaxparams ADD COLUMN ramachandran_cst_weight FLOAT",
-             "ALTER TABLE fastrelaxparams ADD COLUMN self_restraints BOOLEAN",
-             "ALTER TABLE validation ADD COLUMN fsc FLOAT",
-             "ALTER TABLE job ADD COLUMN path VARCHAR",
-             "ALTER TABLE validation ADD COLUMN fsc_test FLOAT",
-             "ALTER TABLE fastrelaxparams RENAME COLUMN params_file TO params_files",
-             "ALTER TABLE validation MODIFY fsc_resolution VARCHAR"]
+    stmts = []
     with engine.connect() as conn:
         for stmt in stmts:
             try:
