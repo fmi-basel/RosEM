@@ -703,6 +703,8 @@ class MainFrame(QtWidgets.QMainWindow):
         self.fastrelaxparams.reset_ctrls()
         self.fastrelaxparams.files.remove_all()
         self.fastrelaxparams.update_from_default(self.default_values)
+        self.gui_params['job_id'] = None
+        self.gui_params['job_project_id'] = None
         self.fastrelaxparams.init_gui(self.gui_params)
 
 
