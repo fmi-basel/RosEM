@@ -60,9 +60,9 @@ When launching the GUI for the first time, you  will be prompted to create a pro
 When the main GUI has started, hovering over input fields will show context help.
 
 Minimum input requirement is:
-A model file [.pdb]
-A map file [.mrc]
-Effective resolution
+* A model file [.pdb]
+* A map file [.mrc]
+* Effective resolution
 
 ![image](https://user-images.githubusercontent.com/29370094/125800628-f74b92e7-4e3e-4be0-8b4d-c2d17d294266.png)
 
@@ -92,9 +92,9 @@ Expected output:
     (submit_script)
 ```
 
-`best_model_w<weight>.pdb - The best model for a specified density weight based on FSC
-`run.sh` - The command used by GUI to run the pipeline
-`job_w<weight>` - Folder containing rosetta_scripts instructions (*.xml), individual models (*.pdb), rosetta command line scripts (*.sh), and rosetta logfiles (*.pdb)
-`validation` - If validation was requested, the folder contains output from molprobity
-`<JOBID>_<JOBNAME>.log - Logfile from the pipeline
-`submit_script` - If queue submission was used from the GUI, this file contains the submission commands
+* `best_model_w<weight>.pdb - The best model for a specified density weight based on FSC
+* `run.sh` - The command used by GUI to run the pipeline
+* `job_w<weight>` - Folder containing rosetta_scripts instructions (*.xml), individual models (*.pdb), rosetta command line scripts (*.sh), and rosetta logfiles (*.pdb)
+* `validation` - If validation was requested, the folder contains output from molprobity
+* `<JOBID>_<JOBNAME>.log - Logfile from the pipeline
+* `submit_script` - If queue submission was used from the GUI, this file contains the submission commands
