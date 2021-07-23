@@ -55,6 +55,15 @@ GUI Application
 rosemgui.py
 ```
 
+When launching the GUI for the first time, you  will be prompted to create a project. Choose a folder where job output should be saved.
+
+When the main GUI has started, hovering over input fields will show context help.
+
+Minimum input requirement is:
+A model file [.pdb]
+A map file [.mrc]
+Effective resolution
+
 ![image](https://user-images.githubusercontent.com/29370094/125800628-f74b92e7-4e3e-4be0-8b4d-c2d17d294266.png)
 
 Command line
@@ -64,7 +73,12 @@ cd some_jobname
 relax.py --help
 ```
 
-By default the pipeline will generate 5 models and select the best based on FSC correlation.
+Minimum input:
+```
+relax.py map.mrc model.pdb -r 3.0
+```
+
+By default the pipeline will generate 5 models and select the best one based on FSC correlation.
 
 Expected output:
 
