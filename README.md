@@ -7,7 +7,7 @@ The GUI and command-line apps provide easy access to the rosetta cryoem refineme
 At the moment only the fastrelax protocol based on this tutorial (https://faculty.washington.edu/dimaio/files/rosetta_density_tutorial_aug18_1.pdf) is implemented.
 
 
-## Installation (Anaconda) ***recommended***
+## Installation
 
 Install rosetta and phenix from
 
@@ -15,6 +15,7 @@ https://www.rosettacommons.org/software/license-and-download
 
 https://phenix-online.org/download/
 
+### Installation (Anaconda) ***recommended***
 
 ```
 cd /some/directory/
@@ -33,7 +34,7 @@ Make sure rosetta and phenix executables are in the PATH. If not you need to spe
 
 Tested on Linux Ubuntu 18.x and MacOS BigSur
 
-## Installation (Virtualenv)
+### Installation (Virtualenv)
 
 Dependencies
 Qt5
