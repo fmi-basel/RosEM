@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The GUI and command-line apps provide easy access to the rosetta cryoem refinement protocol by Frank DiMaio and co. The pipeline automates testing of different parameters, use of reference/starting model restraints (generation with phenix) and selections.
+The GUI and command-line apps provide easy access to the rosetta cryoem refinement protocol by Frank DiMaio and co. The pipeline automates testing of different density weights, use of reference/starting model restraints and selections.
 
 At the moment only the fastrelax protocol based on this tutorial (https://faculty.washington.edu/dimaio/files/rosetta_density_tutorial_aug18_1.pdf) is implemented.
 
