@@ -92,9 +92,9 @@ Expected output:
     (submit_script)
 ```
 
-* `best_model_w<weight>.pdb - The best model for a specified density weight based on FSC
+* `best_model_w<weight>.pdb` - The best model for a specified density weight based on FSC
 * `run.sh` - The command used by GUI to run the pipeline
 * `job_w<weight>` - Folder containing rosetta_scripts instructions (*.xml), individual models (*.pdb), rosetta command line scripts (*.sh), and rosetta logfiles (*.pdb)
 * `validation` - If validation was requested, the folder contains output from molprobity
-* `<JOBID>_<JOBNAME>.log - Logfile from the pipeline
+* `<JOBID>_<JOBNAME>.log` - Logfile from the pipeline
 * `submit_script` - If queue submission was used from the GUI, this file contains the submission commands
