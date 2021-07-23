@@ -1,0 +1,8 @@
+.idea
+build
+dist
+rosem-env
+rosem.egg-info
+.DS_Store
+rosem/remove_subcls.sh
+env
