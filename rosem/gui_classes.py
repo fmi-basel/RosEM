@@ -78,11 +78,37 @@ class Variable:
     def set_value(self, value):
         self.value = value
 
+    def set_control(self, result_obj, result_var):
+        if self.ctrl_type == 'dsb':
+            self.ctrl.setValue(float(result_obj))
+        elif self.ctrl_type == 'lei':
+            self.ctrl.setText(str(result_obj))
+        elif self.ctrl_type == 'pte':
+            self.ctrl.setPlainText(str(result_obj))
+        elif self.ctrl_type == 'sbo':
+            self.ctrl.setValue(int(result_obj))
+        elif self.ctrl_type == 'cmb':
+            for k, v in self.cmb_dict.items():
+                if result_obj == v:
+                    index = self.ctrl.findText(str(k), QtCore.Qt.MatchFixedString)
+                    if index >= 0:
+                        self.ctrl.setCurrentIndex(index)
+        elif self.ctrl_type == 'chk':
+            self.ctrl.setChecked(bool(result_obj))
+        else:
+            logger.error("Control type {} not found for control {}!".format(self.ctrl_type, result_var))
+
     def is_set(self):
         if not self.value is None:
             return True
         else:
             return False
+
+    def update_from_self(self):
+        if not self.value is None and not self.ctrl is None:
+            self.set_control(self.value, self.var_name)
+
+
 
     def update_from_db(self, db_result):
         """ Set/update variable values from DB """
@@ -96,29 +122,12 @@ class Variable:
                     logger.debug("Variable name: {}\nValue: {}".format(result_var, result_obj))
                     if not self.ctrl is None:
                         if not result_obj in ['tbl', None]:
-                            if self.ctrl_type == 'dsb':
-                                self.ctrl.setValue(float(result_obj))
-                            elif self.ctrl_type == 'lei':
-                                self.ctrl.setText(str(result_obj))
-                            elif self.ctrl_type == 'pte':
-                                self.ctrl.setPlainText(str(result_obj))
-                            elif self.ctrl_type == 'sbo':
-                                self.ctrl.setValue(int(result_obj))
-                            elif self.ctrl_type == 'cmb':
-                                for k, v in self.cmb_dict.items():
-                                    if result_obj == v:
-                                        index = self.ctrl.findText(str(k), QtCore.Qt.MatchFixedString)
-                                        if index >= 0:
-                                            self.ctrl.setCurrentIndex(index)
-                            elif self.ctrl_type == 'chk':
-                                self.ctrl.setChecked(bool(result_obj))
-                            else:
-                                logger.error("Control type {} not found for control {}!".format(self.ctrl_type, result_var))
+                            self.set_control(result_obj, result_var)
         else:
             logger.warning("DB result empty. Nothing to update.")
 
     def update_from_gui(self):
-        """ Set/update variable values from GUI controls """
+        """ Set/update attribute values (self.value) from GUI controls """
         if not self.ctrl is None:
             if self.ctrl_type in ['sbo', 'dsb']:
                     self.value = self.ctrl.value()
@@ -404,6 +413,12 @@ class GUIVariables:
                         logger.debug(f"Deleting {obj.var_name}")
                         obj.ctrl = None
 
+    def update_from_self(self):
+        for var in vars(self):
+            obj = getattr(self, var)
+            if hasattr(obj, 'ctrl') and hasattr(obj, 'value'):
+                obj.update_from_self()
+
     # Read values from gui controls and update variables
     def update_from_gui(self):
         logger.debug("Update from GUI")
@@ -422,12 +437,18 @@ class GUIVariables:
                 obj.reset_ctrl()
 
     # Get values from DB for respective job and update gui controls
-    def update_from_db(self, db_result):
+    def update_from_db(self, db_result, other=None):
         if not db_result is None and not db_result == []:
             for var in vars(self):
                 obj = getattr(self, var)
                 if hasattr(obj, 'ctrl'):
-                    obj.update_from_db(db_result)
+                    #Update only if var is in other
+                    if not other is None:
+                        for var_ in vars(other):
+                            if var_ == var:
+                                obj.update_from_db(db_result)
+                    else:
+                        obj.update_from_db(db_result)
         else:
             logger.warning("DB result empty. Nothing to update.")
 
@@ -638,21 +659,10 @@ class FastRelaxParams(GUIVariables):
         self.bond_cst_weight = Variable('bond_cst_weight', 'float', ctrl_type='dsb')
         self.angle_cst_weight = Variable('angle_cst_weight', 'float', ctrl_type='dsb')
         self.ramachandran_cst_weight = Variable('ramachandran_cst_weight', 'float', ctrl_type='dsb')
-        # self.protocol_dict = {
-        #     0: 'FastRelax',
-        #     1: 'Backbone Minimization',
-        #     2: 'Allatom Minimization',
-        #     3: 'Automatic rebuilding',
-        #     4: 'Ramachandran-based rebuilding',
-        #     5: 'Only B-factor refinement'}
+        self.sc_weights = Variable('sc_weights', 'str', ctrl_type='pte')
         self.space_dict = {0: 'Cartesian',
                            1: 'Torsional'}
         self.space = Variable('space', 'int', ctrl_type='cmb', cmb_dict=self.space_dict)
-        #self.constraints_dict = {0: 'None',
-        #                         1: 'Starting coords',
-        #                        2: 'Reference model'}
-        #self.constraints = Variable('constraints', 'int', ctrl_type='cmb', cmb_dict=self.constraints_dict)
-        #self.protocol = Variable('protocol', 'int', ctrl_type='cmb', cmb_dict=self.protocol_dict)
         self.self_restraints = Variable('self_restraints', 'bool', ctrl_type='chk')
         self.files = TblCtrlFiles('files',
                                   None,

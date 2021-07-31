@@ -176,7 +176,7 @@
           <number>30</number>
          </property>
          <item row="2" column="2">
-          <widget class="QCheckBox" name="chk_constrain_start">
+          <widget class="QCheckBox" name="chk_fastrelaxparams_self_restraints">
            <property name="toolTip">
             <string>Generate torsional self-restraints with phenix. </string>
            </property>

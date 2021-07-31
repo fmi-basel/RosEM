@@ -24,6 +24,9 @@ class DefaultValues:
         self.angle_cst_weight = "1.0"
         self.bond_cst_weight = "1.0"
         self.ramachandran_cst_weight = "1.0"
+        self.sc_weights = "R:0.76,K:0.76,E:0.76,D:0.76,M:0.76,C:0.81,"\
+                          "Q:0.81,H:0.81,N:0.81,T:0.81,S:0.81,Y:0.88,"\
+                          "W:0.88,A:0.88,F:0.88,P:0.88,I:0.88,L:0.88,V:0.88"
 
 class FastRelaxOtherSettingsDlg(QtWidgets.QDialog):
     def __init__(self, _parent):
@@ -42,20 +45,14 @@ class FastRelaxOtherSettingsDlg(QtWidgets.QDialog):
     def init(self):
         default_values = DefaultValues()
         if not self.gui_params['job_id'] is None:
-            params = self.fastrelaxparams.get_params_by_job_id(self.gui_params['job_id'], self.sess)
-            self.fastrelaxparams.update_from_db(params)
-            # print(f"Value: {self.fastrelaxparams.ramachandran_cst_weight.value}")
-            # for var in vars(default_values):
-            #     for var_ in vars(self.fastrelaxparams):
-            #         if var == var_:
-            #             obj = getattr(default_values, var)
-            #             obj_ = getattr(self.fastrelaxparams, var_)
-            #             print(f"default obj {obj} fastrelaxobj {obj_.value}")
-            #             if obj_.value is None:
-            #                 print("setting value")
-            #                 obj_.value = obj
+            if not self.gui_params['other_settings_changed']:
+                params = self.fastrelaxparams.get_params_by_job_id(self.gui_params['job_id'], self.sess)
+                self.fastrelaxparams.update_from_db(params, self)
+            else:
+                self.fastrelaxparams.update_from_self()
         else:
             self.fastrelaxparams.update_from_default(default_values)
 
     def OnBtnOk(self):
         self.fastrelaxparams.update_from_gui()
+        self.gui_params['other_settings_changed'] = True

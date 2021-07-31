@@ -65,7 +65,10 @@ def upgrade_db():
     logger.debug("Upgrading DB")
     db_path = os.path.join(os.path.expanduser("~"), '.rosem.db')
     engine = create_engine('sqlite:///{}'.format(db_path), connect_args={'check_same_thread': False})
-    stmts = []
+    stmts = ['ALTER TABLE fastrelaxparams DROP COLUMN sc_weights',
+            'ALTER TABLE fastrelaxparams ADD sc_weights VARCHAR DEFAULT \'R:0.76,K:0.76,E:0.76,'
+             'D:0.76,M:0.76,C:0.81,Q:0.81,H:0.81,N:0.81,T:0.81,S:0.81,Y:0.88,'
+             'W:0.88,A:0.88,F:0.88,P:0.88,I:0.88,L:0.88,V:0.88\'']
     with engine.connect() as conn:
         for stmt in stmts:
             try:
@@ -113,6 +116,7 @@ class MainFrame(QtWidgets.QMainWindow):
         self.gui_params['queue_job_id'] = None
         self.gui_params['job_project_id'] = None
         self.gui_params['job_name'] = "FastRelaxDens"
+        self.gui_params['other_settings_changed'] = False
         self.default_values = default_values
         self.db = db
         self.sess = sess
@@ -564,6 +568,7 @@ class MainFrame(QtWidgets.QMainWindow):
             logger.debug(f"New project ID {new_project_id}")
             self.gui_params['project_id'] = new_project_id
             self.gui_params['project_path'] = self.prj.get_path_by_project_id(new_project_id, self.sess)
+            self.gui_params['other_settings_changed'] = False
             self.gui_params = self.job.init_gui(self.gui_params, self.sess)
 
     # def OnCmbProtocol(self, event):
@@ -593,6 +598,7 @@ class MainFrame(QtWidgets.QMainWindow):
         self.gui_params['log_file'] = self.job.get_log_file(self.gui_params['project_path'],
                                                 self.gui_params['job_project_id'],
                                                 self.gui_params['job_name'])
+        self.gui_params['other_settings_changed'] = False
         logger.debug(f"====================>> job project id: {self.gui_params['job_project_id']}")
         logger.debug(f"Job ID: {self.gui_params['job_id']}")
         result = self.fastrelaxparams.get_params_by_job_id(self.gui_params['job_id'], self.sess)
@@ -663,6 +669,7 @@ class MainFrame(QtWidgets.QMainWindow):
         logger.debug("PrjAdd button pressed")
 
     def OnBtnFastRelaxOtherSettings(self):
+        self.fastrelaxparams.update_from_gui()
         dlg = FastRelaxOtherSettingsDlg(self)
         dlg.exec()
 
@@ -705,6 +712,7 @@ class MainFrame(QtWidgets.QMainWindow):
         self.fastrelaxparams.update_from_default(self.default_values)
         self.gui_params['job_id'] = None
         self.gui_params['job_project_id'] = None
+        self.gui_params['other_settings_changed'] = False
         self.fastrelaxparams.init_gui(self.gui_params)
 
 

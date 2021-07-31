@@ -106,7 +106,7 @@ class FastRelaxDensity:
                  params_files=[],
                  reference_model=None,
                  test_map=None,
-                 cst_weight=2,
+                 cst_weight=None,
                  resolution=None,
                  weight=[],
                  #b_factor=False,
@@ -130,13 +130,14 @@ class FastRelaxDensity:
                  validation=False,
                  logging_mode='standard',
                  log_file='rosetta_relax_density_pipeline.log',
-                 dihedral_cst_weight="2.0",
-                 distance_cst_weight="2.0",
-                 bond_cst_weight="1.0",
-                 angle_cst_weight="1.0",
-                 ramachandran_cst_weight="0.5",
-                 phenix_path = None,
-                 rosetta_path = None,
+                 dihedral_cst_weight=2.0,
+                 distance_cst_weight=2.0,
+                 bond_cst_weight=1.0,
+                 angle_cst_weight=1.0,
+                 ramachandran_cst_weight=0.5,
+                 sc_weights=None,
+                 phenix_path=None,
+                 rosetta_path=None,
                  **kwargs):
 
         #####################
@@ -196,6 +197,12 @@ class FastRelaxDensity:
         self.ramachandran_cst_weight = ramachandran_cst_weight
         if self.ramachandran:
             self.ramachandran_cst_weight = 2.0
+        if not sc_weights is None and not sc_weights == "":
+            self.sc_weights = sc_weights
+        else:
+            self.sc_weights = "R:0.76,K:0.76,E:0.76,D:0.76,M:0.76,C:0.81," \
+                              "Q:0.81,H:0.81,N:0.81,T:0.81,S:0.81,Y:0.88," \
+                              "W:0.88,A:0.88,F:0.88,P:0.88,I:0.88,L:0.88,V:0.88"
         self.space = space.lower()
         #self.protocol = protocol
         self.fastrelax = fastrelax
@@ -313,23 +320,17 @@ class FastRelaxDensity:
         if not self.symm_file is None:
             score_function.set("symmetric", "1")
         #Reweight constraints .
-        ET.SubElement(score_function, "Reweight", scoretype="atom_pair_constraint", weight=self.distance_cst_weight)
-        ET.SubElement(score_function, "Reweight", scoretype="dihedral_constraint", weight=self.dihedral_cst_weight)
-        ET.SubElement(score_function, "Reweight", scoretype="angle_constraint", weight=self.angle_cst_weight)
+        ET.SubElement(score_function, "Reweight", scoretype="atom_pair_constraint", weight=str(self.distance_cst_weight))
+        ET.SubElement(score_function, "Reweight", scoretype="dihedral_constraint", weight=str(self.dihedral_cst_weight))
+        ET.SubElement(score_function, "Reweight", scoretype="angle_constraint", weight=str(self.angle_cst_weight))
         #Reweight density scoring according to input weight
-        ET.SubElement(score_function, "Reweight", scoretype="elec_dens_fast", weight=wt)
+        ET.SubElement(score_function, "Reweight", scoretype="elec_dens_fast", weight=str(wt))
         #Reweight cartesian bonds and angles to get lower rmsd.
-        ET.SubElement(score_function, "Reweight", scoretype="cart_bonded_length", weight=self.bond_cst_weight)
-        ET.SubElement(score_function, "Reweight", scoretype="cart_bonded_angle", weight=self.angle_cst_weight)
-        ET.SubElement(score_function, "Reweight", scoretype="rama_prepro", weight=self.ramachandran_cst_weight)
-        #if self.bb_h:
-        #    reweight_bbhsr = ET.SubElement(score_function, "Reweight", scoretype="hbond_sr_bb", weight="10.0")
-        #    reweight_bbhlr = ET.SubElement(score_function, "Reweight", scoretype="hbond_lr_bb", weight="10.0")
-        #Values of R, K, E increased to achieve better density fits
+        ET.SubElement(score_function, "Reweight", scoretype="cart_bonded_length", weight=str(self.bond_cst_weight))
+        ET.SubElement(score_function, "Reweight", scoretype="cart_bonded_angle", weight=str(self.angle_cst_weight))
+        ET.SubElement(score_function, "Reweight", scoretype="rama_prepro", weight=str(self.ramachandran_cst_weight))
         ET.SubElement(score_function, "Set",
-                      scale_sc_dens_byres="R:0.76,K:0.76,E:0.76,D:0.76,M:0.76,C:0.81,"
-                                          "Q:0.81,H:0.81,N:0.81,T:0.81,S:0.81,Y:0.88,"
-                                          "W:0.88,A:0.88,F:0.88,P:0.88,I:0.88,L:0.88,V:0.88")
+                      scale_sc_dens_byres=self.sc_weights)
 
         ###################
         #Residue Selection#
@@ -911,9 +912,29 @@ def get_cli_args():
     parser.add_argument('--self_restraints',
                         help='Generate torsional restraints with phenix.',
                         action="store_true")
-    parser.add_argument('--cst_weight',
-                        help='Weight for restraints. default=2',
-                        default='2')
+    parser.add_argument('--dihedral_cst_weight',
+                        help='Weight for restraints.',
+                        type=float,
+                        default=2.0)
+    parser.add_argument('--distance_cst_weight',
+                        help='Weight for restraints.',
+                        type=float,
+                        default=2.0)
+    parser.add_argument('--bond_cst_weight',
+                        help='Weight for restraints.',
+                        type=float,
+                        default=1.0)
+    parser.add_argument('--angle_cst_weight',
+                        help='Weight for restraints.',
+                        type=float,
+                        default=1.0)
+    parser.add_argument('--ramachandran_cst_weight',
+                        help='Weight for restraints.',
+                        type=float,
+                        default=0.5)
+    parser.add_argument('--sc_weights',
+                        help='Density weights for sidechains.',
+                        type=str)
     parser.add_argument('--num_cycles',
                         help='Number of relax cycles. default=5',
                         default=5,
