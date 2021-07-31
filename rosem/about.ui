@@ -77,7 +77,7 @@
     <item>
      <widget class="QLabel" name="label_5">
       <property name="text">
-       <string>License: MIT</string>
+       <string>License: Apache 2.0</string>
       </property>
      </widget>
     </item>

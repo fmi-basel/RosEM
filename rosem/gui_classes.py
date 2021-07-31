@@ -162,30 +162,8 @@ class Variable:
             logger.debug(f"ctrl of {self.var_name} is not bound.")
 
 
-
-
-# class TxtControl(Control):
-#     def __init__(self):
-#         self.ctrl_obj = None
-#         self.ctrl_type = 'txt'
-#
-#
-# class CmbControl(Control):
-#     def __init__(self, items):
-#         super().__init__()
-#         self.items = items
-#         self.ctrl_type = 'cmb'
-#
-# class LstControl(Control):
-#     def __init__(self, get_method, set_method):
-#         super().__init__()
-#         self.type = 'lst'
-#         self.get = get_method
-#         self.set = set_method
-#
 class File(Variable):
     """Model for files loaded as parameters"""
-
     def __init__(self, var_name=None, type=None, db=True, ctrl_type=None, db_primary_key=False, db_foreign_key=None,
                  file_ext=None, unique=False, file_type=None):
         super().__init__(var_name, type, db, ctrl_type, db_primary_key, db_foreign_key)
