@@ -46,8 +46,10 @@ class FastRelaxOtherSettingsDlg(QtWidgets.QDialog):
         default_values = DefaultValues()
         if not self.gui_params['job_id'] is None:
             if not self.gui_params['other_settings_changed']:
+                logger.debug("Other params not changed. Getting params from DB.")
                 params = self.fastrelaxparams.get_params_by_job_id(self.gui_params['job_id'], self.sess)
-                self.fastrelaxparams.update_from_db(params, self)
+                logger.debug(params)
+                self.fastrelaxparams.update_from_db(params, default_values)
             else:
                 self.fastrelaxparams.update_from_self()
         else:

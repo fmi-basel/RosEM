@@ -45,7 +45,7 @@ install_path = os.path.dirname(os.path.realpath(sys.argv[0]))
 
 
 class Variable:
-    """Basic object model for GUI controls and DB tables"""
+    """Basic model for GUI controls and DB tables"""
 
     def __init__(self, var_name=None,
                  type=None,
@@ -112,7 +112,7 @@ class Variable:
 
     def update_from_db(self, db_result):
         """ Set/update variable values from DB """
-        logger.debug("Update form DB")
+        logger.debug("Update from DB")
         if not db_result is None and not db_result == []:
             for result_var in vars(db_result):
                 #logger.debug("DB var: {}\nClass var: {}".format(result_var, self.var_name))
@@ -139,6 +139,8 @@ class Variable:
                 self.value = self.ctrl.isChecked()
             elif self.ctrl_type == 'cmb':  # and not self.selected_item is None:
                 self.value = self.ctrl.currentText()
+            #if self.value == "":
+            #    self.value = None
         else:
             logger.debug(f"ctrl of {self.var_name} is not bound.")
 
@@ -356,7 +358,7 @@ class TblCtrlFiles(Variable):
 
 
 class GUIVariables:
-
+    """ Functions shared by GUI associated variables. Inherited by """
     def set_controls(self, ui, db_table):
         logger.debug("Setting controls")
         for var in vars(self):
@@ -416,13 +418,16 @@ class GUIVariables:
 
     # Get values from DB for respective job and update gui controls
     def update_from_db(self, db_result, other=None):
+        logger.debug("========>>> Update from DB")
         if not db_result is None and not db_result == []:
             for var in vars(self):
                 obj = getattr(self, var)
                 if hasattr(obj, 'ctrl'):
                     #Update only if var is in other
                     if not other is None:
+                        logger.debug("Updating only variables in \"other\" object")
                         for var_ in vars(other):
+                            logger.debug(f"params var {var}, other var {var_}")
                             if var_ == var:
                                 obj.update_from_db(db_result)
                     else:

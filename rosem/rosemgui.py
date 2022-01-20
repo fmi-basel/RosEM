@@ -33,11 +33,23 @@ from rosem.db_helper import DBHelper
 from sqlalchemy import create_engine
 import traceback
 from rosem.gui_classes import Job, Settings, FastRelaxParams, Project, Validation, DefaultValues
+import argparse
+
+
+parser = argparse.ArgumentParser(description="Pipeline for running rosetta fast_relax protocol with density"
+                                             "scoring.")
+parser.add_argument('--debug', '-r',
+                    help='Debug log.',
+                    action='store_true')
+args, unknown = parser.parse_known_args()
 
 install_path = os.path.dirname(os.path.realpath(sys.argv[0]))
 logger = logging.getLogger('RosEM')
 formatter = logging.Formatter("[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s")
-logger.setLevel(logging.INFO)
+if not args.debug:
+    logger.setLevel(logging.INFO)
+else:
+    logger.setLevel(logging.DEBUG)
 ch = logging.StreamHandler()
 ch.setFormatter(formatter)
 logger.addHandler(ch)
@@ -424,7 +436,7 @@ class MainFrame(QtWidgets.QMainWindow):
                 message_dlg('Error','Map required!')
             elif self.fastrelaxparams.resolution.value is None:
                 message_dlg('Error','Resolution required!')
-            elif not self.fastrelaxparams.self_restraints.value is None and not self.fastrelaxparams.reference_model.value is None:
+            elif self.fastrelaxparams.self_restraints.value is True and not self.fastrelaxparams.reference_model.value is None:
                 message_dlg('Error', 'Self-restraints and reference model cannot be combined!')
             else:
                 #Collect params from GUI and return as dict
