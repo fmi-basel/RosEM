@@ -13,6 +13,14 @@
 #limitations under the License.
 import re
 from pyparsing import ParseException, Word, printables, infixNotation, Group, alphas, nums, White, opAssoc
+import sys
+import logging
+
+
+logger = logging.getLogger("RosEM")
+
+class SelectionParserError(Exception):
+    pass
 
 class ResidueSelection:
     '''Compatible syntax:
@@ -25,8 +33,8 @@ class ResidueSelection:
     '''
     def __init__(self, selection_string):
         self.selection_string = selection_string
-        print("Selection string")
-        print(self.selection_string)
+        logger.debug("Selection string")
+        logger.debug(self.selection_string)
         self.ops = ['and', 'or']
         self.selector_lst = []
         self.converted_lst = []
@@ -35,11 +43,13 @@ class ResidueSelection:
         self.selection_lst = self.parse_nested_expr()
         self.replace_name(self.selection_lst)
         self.replace_op(self.selection_lst)
+        self.reorder_by_selector_index()
         self.index_dict = {}
+        self.error_msg = []
 
     def remove_quotes(self):
         if re.search('"', self.selection_string):
-            print("removing quotes")
+            logger.debug("removing quotes")
             self.selection_string = self.selection_string.replace('"', '')
 
 
@@ -50,7 +60,7 @@ class ResidueSelection:
             self.selection_string = "{})".format(self.selection_string)
 
     def parse_nested_expr(self):
-        varname = Word(alphas)
+        varname = Word(alphas + nums + "-")
         integer = Word(nums + "-")#.setParseAction(lambda t: int(t[0]))
 
         comparisonOp = White(" ")
@@ -65,18 +75,18 @@ class ResidueSelection:
         try:
             result = logicalExpr.parseString(self.selection_string).asList()
         except ParseException:
-            print("exception parsing selection string")
+            logger.debug("exception parsing selection string")
             comparisonExpr = Group(term + comparisonOp + term + comparisonOp + term)
-
+            #comparisonExpr = Group(term)
             logicalExpr = infixNotation(comparisonExpr,
                                         [
                                             ('and', 2, opAssoc.LEFT),
                                             ('or', 2, opAssoc.LEFT),
                                         ])
             result = logicalExpr.parseString(self.selection_string).asList()
-        print("nested_expr")
-        print(result)
-        print(self.selection_string)
+        logger.debug("nested_expr")
+        logger.debug(result)
+        logger.debug(self.selection_string)
         return result
 
 
@@ -85,18 +95,18 @@ class ResidueSelection:
         for i, item in enumerate(lst):
             if i == 0:
                 indices.append(i)
-            print("Item: {}, Index: {}".format(item, i))
+            logger.debug("Item: {}, Index: {}".format(item, i))
             if isinstance(item, list):
                 indices[-1] = i
-                print("new indices list: {}".format(indices))
+                logger.debug("new indices list: {}".format(indices))
                 hierachy(item, indices)
             else:
                 indices[-1] = i
                 if item in self.ops:
-                    print("True")
+                    logger.debug("True")
 
                     new_indices = [x for x in indices]
-                    print("new indices ops: {}".format(new_indices))
+                    logger.debug("new indices ops: {}".format(new_indices))
                     l_i = [x for x in indices]
                     l_i[-1] = i - 1
                     l_i = ''.join([str(x) for x in l_i])
@@ -105,7 +115,7 @@ class ResidueSelection:
                     r_i = ''.join([str(x) for x in r_i])
                     self.index_dict[''.join([str(x) for x in indices])] = [l_i, r_i]
                 else:
-                    print("indices list: {}".format(indices))
+                    logger.debug("indices list: {}".format(indices))
             if i + 1 == len(lst):
                 indices.pop()
             prev_i = i
@@ -114,61 +124,76 @@ class ResidueSelection:
         for i, item in enumerate(lst):
             if i == 0:
                 indices.append(i)
-            print("Item: {}, Index: {}".format(item, i))
+            logger.debug("Item: {}, Index: {}".format(item, i))
             if isinstance(item, list):
                 indices[-1] = i
-                print("new indices list: {}".format(indices))
+                logger.debug("new indices list: {}".format(indices))
                 self.replace_name(item, indices)
             else:
                 if not item in self.ops and not item is None:
                     if i == 0:
-                        print(lst)
+                        logger.debug(lst)
                         merged = ''.join([str(x) for x in lst])
-                        print("merged")
-                        print(merged)
+                        logger.debug("merged")
+                        logger.debug(merged)
                         selector_index = ''.join([str(x) for x in indices])
                         selector = self.name_parser(merged, selector_index)
                         lst[:] = [selector]
                         self.selector_lst.append(selector)
                     else:
-                        print("delete {}".format(i))
+                        logger.debug("delete {}".format(i))
                         #del lst[i]
             if i + 1 == len(lst):
                 indices.pop()
             prev_i = i
 
     def replace_op(self, lst, indices=[]):
+        op_found = False
         for i, item in enumerate(lst):
+
             if i == 0:
                 indices.append(i)
-            print("Item: {}, Index: {}".format(item, i))
+            logger.debug("Item: {}, Index: {}".format(item, i))
             if isinstance(item, list):
+
                 indices[-1] = i
-                print("new indices list: {}".format(indices))
+                logger.debug("new indices list: {}".format(indices))
+                ops = set([x for x in item if x in self.ops])
+                #If list element does not contain any further nested expressions do not reset op_found
+                if len(ops) > 0:
+                    op_found = False
                 self.replace_op(item, indices)
-            else:
+            elif not op_found:
                 selector_index = ''.join([str(x) for x in indices]) + '0'
                 indices[-1] = i
                 if not item is None:
                     if item.lower() in self.ops:
-                        l_i = [x for x in indices]
-                        l_i[-1] = i - 1
-                        l_i = ''.join([str(x) for x in l_i]) + '0'
-                        r_i = [x for x in indices]
-                        r_i[-1] = i + 1
-                        r_i = ''.join([str(x) for x in r_i]) + '0'
+                        # l_i = [x for x in indices]
+                        # l_i[-1] = i - 1
+                        # l_i = ''.join([str(x) for x in l_i]) + '0'
+                        # r_i = [x for x in indices]
+                        # r_i[-1] = i + 1
+                        # r_i = ''.join([str(x) for x in r_i]) + '0'
+                        logger.debug("All elements")
+                        num_elements = len([x for x in lst if not x in self.ops])
+                        all_elements = [''.join([str(x) for x in indices[:-1]]) + str(o) + '0' for o in range(0, (num_elements*2), 2)]
+                        logger.debug(all_elements)
+                        logger.debug(indices)
                         if item.lower() == 'and':
                             self.converted_lst.append(
-                                ("And", selector_index[:-1], "{},{}".format(l_i, r_i), False)
+                               # ("And", selector_index[:-1], "{},{}".format(l_i, r_i), False)
                                 #"<And selector=\"{},{}\">".format(l_i, r_i)
+                                ("And", selector_index[:-1], ','.join(x for x in all_elements), False)
                             )
+                            op_found = True
                         elif item.lower() == 'or':
                             self.converted_lst.append(
-                                ("Or", selector_index[:-1], "{},{}".format(l_i, r_i), False)
+                                ("Or", selector_index[:-1], ','.join(x for x in all_elements), False)
                                 #"<Or selector=\"{},{}\">".format(l_i, r_i)
                             )
+                            op_found = True
                         else:
-                            print("delete {}".format(i))
+                            logger.debug("delete {}".format(i))
                             #del lst[i]
             if i + 1 == len(lst):
                 indices.pop()
@@ -176,45 +201,84 @@ class ResidueSelection:
 
 
     def name_parser(self, name, selector_index):
-        print("name parser")
-        print(name)
+        logger.debug("name parser")
+        logger.debug(name)
         if re.match("\s*not\s{1}.*", name):
             invert = True
         else:
             invert = False
-        if re.match(".*resi\s{1}\d+$", name):
-            resi = re.match(".*resi\s{1}(\d+)$", name).group(1)
+        if re.match(".*resi\s{1}\w+$", name):
+            resi = re.match(".*resi\s{1}(\w+)$", name).group(1)
             #resi_selector = "<ResidueIndex name=\"{}\" resnums=\"{}\">".format(selector_index, resi)
-            #print(self.resi_selector)
+            #logger.debug(self.resi_selector)
             self.converted_lst.append(("Index", selector_index, resi, invert))
             #return resi_selector
-        elif re.match(".*resi\s{1}\d+-\d+", name):
-            g = re.match(".*resi\s{1}(\d+)-(\d+)", name)
+        elif re.match(".*resi\s{1}\w+-\w+", name):
+            logger.debug("resi match")
+            g = re.match(".*resi\s{1}(\w+)-(\w+)", name)
             resi_1, resi_2 = g.group(1), g.group(2)
             #resi_selector = "<ResidueSpan name=\"{}\" resnums=\"{},{}\">".format(
             #    selector_index, resi_1, resi_2)
             self.converted_lst.append(("Index", selector_index, "{}-{}".format(resi_1, resi_2), invert))
-            #print(resi_selector)
+            #logger.debug(resi_selector)
             #return resi_selector
         elif re.match(".*resn\s{1}\w+", name):
             resn = re.match(".*resn\s{1}(\w+)", name).group(1)
             #resn_selector = "<ResidueName name=\"{}\" residue_names=\"{}\">".format(selector_index, resn)
-            #print(resn_selector)
+            #logger.debug(resn_selector)
             self.converted_lst.append(("ResidueName", selector_index, resn, invert))
             #return resn_selector
         elif re.match(".*chain\s{1}\w+", name):
             chain = re.match(".*chain\s{1}(\w+)", name).group(1)
             #chain_selector = "<Chain name=\"{}\" chains=\"{}\">".format(selector_index, chain)
-            #print(chain_selector)
+            #logger.debug(chain_selector)
             self.converted_lst.append(("Chain", selector_index, chain, invert))
             #return chain_selector
 
+    def reorder_by_selector_index(self):
+        prev_num = 0
+        prev_index = 0
+        reordered = True
+        if len(self.converted_lst) > 1:
+            while reordered:
+                for i, item in enumerate(self.converted_lst):
+                    num = item[1].lstrip("0")
+                    num = 0 if len(num) == 0 else num
+                    if not i == 0:
+                        if len(item[1]) > len(prev_index_name):
+                            logger.debug(f"{item[1]} shorter than {prev_index_name}")
+                            item_pop = self.converted_lst.pop(i)
+                            self.converted_lst.insert(i-1, item_pop)
+                            reordered = True
+                        elif len(item[1]) == len(self.converted_lst[prev_index][1]):
+                            if int(num) > int(prev_num):
+                                item_pop = self.converted_lst.pop(i)
+                                self.converted_lst.insert(i-1, item_pop)
+                                reordered = True
+                        else:
+                            reordered = False
+                    prev_num = num
+                    prev_index_name = item[1]
+                    logger.debug("Reorder")
+                    logger.debug(self.converted_lst)
+
     def get_list(self):
-        print(self.converted_lst)
-        return self.converted_lst
+        if self.error_msg != []:
+            raise SelectionParserError(' '.join(self.error_msg))
+            return self.error_msg
+        else:
+            logger.debug(self.converted_lst)
+            return self.converted_lst
 
 
-
+if __name__ == '__main__':
+    logger = logging.getLogger('RosEM')
+    formatter = logging.Formatter("[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s")
+    logger.setLevel(logging.DEBUG)
+    ch = logging.StreamHandler()
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
+    ResidueSelection(sys.argv[1]).get_list()
 # <RESIDUE_SELECTORS>
 # <ResidueName name="PTD_LYX" residue_names="PTD,LYX" />
 # </RESIDUE_SELECTORS>

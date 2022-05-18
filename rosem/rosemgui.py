@@ -432,8 +432,6 @@ class MainFrame(QtWidgets.QMainWindow):
                 message_dlg('Error', 'No Project selected!')
             elif self.fastrelaxparams.model_file.value is None:
                 message_dlg('Error', 'Model required!')
-            elif self.fastrelaxparams.map_file.value is None:
-                message_dlg('Error','Map required!')
             elif self.fastrelaxparams.resolution.value is None:
                 message_dlg('Error','Resolution required!')
             elif self.fastrelaxparams.self_restraints.value is True and not self.fastrelaxparams.reference_model.value is None:
@@ -650,8 +648,6 @@ class MainFrame(QtWidgets.QMainWindow):
             self.delete_jobfiles_action.triggered.connect(lambda state, x=job_id, y=job_path: self.OnDeleteEntryFiles(x, y))
             self.set_finished_action.triggered.connect(lambda state, x=job_id: self.OnStatusFinished(x))
             self.set_running_action.triggered.connect(lambda state, x=job_id: self.OnStatusRunning(x))
-
-
             menu.exec_(self.job.list.ctrl.mapToGlobal(pos))
 
 
@@ -684,7 +680,6 @@ class MainFrame(QtWidgets.QMainWindow):
         self.fastrelaxparams.update_from_gui()
         dlg = FastRelaxOtherSettingsDlg(self)
         dlg.exec()
-
 
     def OnBtnPrjRemove(self):
         logger.debug("PrjRemove button pressed")

@@ -33,9 +33,7 @@ from contextlib import closing
 from xml.dom import minidom
 import json
 
-logger = logging.getLogger("RosEM")
-#logger.setLevel(logging.DEBUG)
-logger.setLevel(logging.INFO)
+
 #ch = logging.StreamHandler()
 #logger.addHandler(ch)
 
@@ -47,7 +45,7 @@ logger.setLevel(logging.INFO)
 #     def run_validation_mp(self, results_q, model, map, resolution):
 #         print("run validation")
 #         results_q.put(self.run_validation(model, map, resolution))
-
+logger = logging.getLogger("RosEM")
 
 class ExecPath:
     def __init__(self, logger):
@@ -139,13 +137,19 @@ class FastRelaxDensity:
                  phenix_path=None,
                  rosetta_path=None,
                  **kwargs):
+        """
+
+        """
 
         #####################
         # Define attributes #
         #####################
 
         #User defined
-        self.map_file = os.path.abspath(map_file)
+        if not map_file is None:
+            self.map_file = os.path.abspath(map_file)
+        else:
+            self.map_file = None
         self.pdb_file = os.path.abspath(model_file)
         logger.debug("params fields before abspath")
         logger.debug(params_files)
@@ -181,7 +185,10 @@ class FastRelaxDensity:
             self.dihedral_cst_weight = self.cst_weight
             self.distance_cst_weight = self.distance_cst_weight
         self.resolution = resolution
-        self.weights = weight.split(',')
+        if not self.map_file is None:
+            self.weights = weight.split(',')
+        else:
+            self.weights = ["nodens"]
         self.b_factor = bfactor
         self.constrain_side_chains = constrain_side_chains
         self.self_restraints = self_restraints
@@ -192,6 +199,9 @@ class FastRelaxDensity:
         self.allatom_min = False
         self.fastrelax = fastrelax
         self.norepack = norepack
+        self.bond_weight = 2.0
+        self.angle_weight = 2.0
+        self.torsion_weight = 2.0
 
         self.ramachandran = ramachandran
         self.ramachandran_cst_weight = ramachandran_cst_weight
@@ -205,7 +215,6 @@ class FastRelaxDensity:
                               "W:0.88,A:0.88,F:0.88,P:0.88,I:0.88,L:0.88,V:0.88"
         self.space = space.lower()
         #self.protocol = protocol
-        self.fastrelax = fastrelax
         self.rebuild = False
         self.rebuild_rms="1.5"
         self.rebuild_strategy=None
@@ -215,7 +224,10 @@ class FastRelaxDensity:
         self.bb_h = bb_h
         self.ranking_method = ranking_method
         self.logging_mode = logging_mode
-        self.run_validation = validation
+        if not self.map_file is None:
+            self.run_validation = validation
+        else:
+            self.run_validation = False
         self.selection_str = selection
         self._space_parser()
         #Static
@@ -299,6 +311,7 @@ class FastRelaxDensity:
         #weights = "score4_smooth_cart" > < Reweight
         #scoretype = "elec_dens_fast"
         #weight = "20" / > < / ScoreFunction >
+
         if self.bb_min or self.rebuild:
             score_function = ET.SubElement(scorefxns,
                                            "ScoreFunction",
@@ -310,8 +323,8 @@ class FastRelaxDensity:
                                            "ScoreFunction",
                                            name="dens_soft",
                                            weights="beta_soft")
-            reweight_cart_bonded = ET.SubElement(score_function_soft, "Reweight", scoretype="cart_bonded", weight="0.5")
-            reweight_pro_close = ET.SubElement(score_function_soft, "Reweight", scoretype="pro_close", weight="0")
+            reweight_cart_bonded = ET.SubElement(score_function_soft, "Reweight", scoretype="cart_bonded", weight="2.0")
+            #reweight_pro_close = ET.SubElement(score_function_soft, "Reweight", scoretype="pro_close", weight="0")
             reweight_elec_dens_fast = ET.SubElement(score_function_soft, "Reweight", scoretype="elec_dens_fast", weight=wt)
         if self.torsional:
             score_function = ET.SubElement(scorefxns, "ScoreFunction", name="dens", weights="beta")
@@ -319,25 +332,44 @@ class FastRelaxDensity:
             score_function = ET.SubElement(scorefxns, "ScoreFunction", name="dens", weights="beta_cart")
         if not self.symm_file is None:
             score_function.set("symmetric", "1")
+
+        if not self.map_file is None:
+            ET.SubElement(score_function, "Reweight", scoretype="elec_dens_fast", weight=str(wt))
+            ET.SubElement(score_function, "Set",
+                  scale_sc_dens_byres=self.sc_weights)
+        else:
+            score_function.set("name", "nodens")
         #Reweight constraints .
         ET.SubElement(score_function, "Reweight", scoretype="atom_pair_constraint", weight=str(self.distance_cst_weight))
         ET.SubElement(score_function, "Reweight", scoretype="dihedral_constraint", weight=str(self.dihedral_cst_weight))
         ET.SubElement(score_function, "Reweight", scoretype="angle_constraint", weight=str(self.angle_cst_weight))
         #Reweight density scoring according to input weight
-        ET.SubElement(score_function, "Reweight", scoretype="elec_dens_fast", weight=str(wt))
+
         #Reweight cartesian bonds and angles to get lower rmsd.
-        ET.SubElement(score_function, "Reweight", scoretype="cart_bonded_length", weight=str(self.bond_cst_weight))
-        ET.SubElement(score_function, "Reweight", scoretype="cart_bonded_angle", weight=str(self.angle_cst_weight))
+        ET.SubElement(score_function, "Reweight", scoretype="cart_bonded_length", weight=str(self.bond_weight))
+        ET.SubElement(score_function, "Reweight", scoretype="cart_bonded_angle", weight=str(self.angle_weight))
+        ET.SubElement(score_function, "Reweight", scoretype="cart_bonded_torsion", weight=str(self.torsion_weight))
         ET.SubElement(score_function, "Reweight", scoretype="rama_prepro", weight=str(self.ramachandran_cst_weight))
-        ET.SubElement(score_function, "Set",
-                      scale_sc_dens_byres=self.sc_weights)
+        ET.SubElement(score_function, "Reweight", scoretype="dna_bb_torsion", weight="0.6")
+        ET.SubElement(score_function, "Reweight", scoretype="dna_sugar_close", weight="0856")
+        ET.SubElement(score_function, "Reweight", scoretype="dna_chi", weight="0.5")
+        ET.SubElement(score_function, "Reweight", scoretype="orbitals_hpol_bb", weight="0.2")
+        ET.SubElement(score_function, "Reweight", scoretype="pci_cation_pi", weight="0.5")
+        ET.SubElement(score_function, "Reweight", scoretype="pci_pi_pi", weight="0.065")
+        ET.SubElement(score_function, "Reweight", scoretype="pci_salt_bridge", weight="0.32")
+        ET.SubElement(score_function, "Reweight", scoretype="pci_hbond", weight="0.3")
+
+
 
         ###################
         #Residue Selection#
         ###################
 
         if not self.selection_str is None:
+            logger.debug("Running selection parser...")
             converted_selections_lst = ResidueSelection(self.selection_str).get_list()
+            logger.debug("Parsed selection string:")
+            logger.debug(converted_selections_lst)
             residue_selectors = ET.SubElement(rosetta, "RESIDUE_SELECTORS")
             move_map_factories = ET.SubElement(rosetta, "MOVE_MAP_FACTORIES")
             move_map_factory = ET.SubElement(move_map_factories,
@@ -369,7 +401,7 @@ class FastRelaxDensity:
                         if invert:
                             ET.SubElement(not_selector, type, residue_names=values)
                         else:
-                            ET.SubElement(residue_selectors, type, name=name, resnums=values)
+                            ET.SubElement(residue_selectors, type, name=name, residue_names=values)
                 if not 'And' in types and not 'Or' in types:
                     ET.SubElement(move_map_factory, "Backbone", residue_selector=name)
                     ET.SubElement(move_map_factory, "Chi", residue_selector=name)
@@ -379,26 +411,27 @@ class FastRelaxDensity:
         #MOVERS#
         ########
         movers = ET.SubElement(rosetta, "MOVERS")
-        if not self.symm_file is None:
-            setup_for_symmetry_scoring = ET.SubElement(movers,
-                                                       "SetupForSymmetry",
-                                                       name="setupsymm",
-                                                       definition=self.symm_file)
-        else:
-            setup_for_density_scoring = ET.SubElement(movers,
-                                                      "SetupForDensityScoring",
-                                                      name="setupdens")
-        load_density_map = ET.SubElement(movers,
-                                         "LoadDensityMap",
-                                         name="loaddens",
-                                         mapfile=self.map_file)
-        bfactor_fitting = ET.SubElement(movers,
-                                        "BfactorFitting",
-                                        name="fit_bs",
-                                        max_iter="50",
-                                        wt_adp="0.0005",
-                                        init="1",
-                                        exact="1")
+        if not self.map_file is None:
+            if not self.symm_file is None:
+                setup_for_symmetry_scoring = ET.SubElement(movers,
+                                                           "SetupForSymmetry",
+                                                           name="setupsymm",
+                                                           definition=self.symm_file)
+            else:
+                setup_for_density_scoring = ET.SubElement(movers,
+                                                          "SetupForDensityScoring",
+                                                          name="setupdens")
+            load_density_map = ET.SubElement(movers,
+                                             "LoadDensityMap",
+                                             name="loaddens",
+                                             mapfile=self.map_file)
+            bfactor_fitting = ET.SubElement(movers,
+                                            "BfactorFitting",
+                                            name="fit_bs",
+                                            max_iter="50",
+                                            wt_adp="0.0005",
+                                            init="1",
+                                            exact="1")
         if self.allatom_min:
             min_mover = ET.SubElement(movers,
                                    "MinMover",
@@ -468,6 +501,8 @@ class FastRelaxDensity:
                                        scorefxn="dens",
                                        repeats=str(self.num_cycles),
                                        cartesian="1")
+            if self.map_file is None:
+                fast_relax.set("scorefxn", "nodens")
             #Load cst file if available.
             if not self.cst_file is None:
                 fast_relax.set("cst_file", self.cst_file)
@@ -482,16 +517,21 @@ class FastRelaxDensity:
             # If torsional refinement requested set cartesian to 0.
             if self.torsional:
                 fast_relax.set("cartesian", "0")
-        res_low = self._get_res_low(self.resolution)
-        report_fsc = ET.SubElement(movers, "ReportFSC", name="report_fsc", res_low=res_low, res_high=self.resolution)
+                fast_relax.set("bondangle", "0")
+                fast_relax.set("bondlength", "0")
+
+
         if not self.test_map is None:
             report_fsc.set("testmap", self.test_map)
         protocols = ET.SubElement(rosetta, "PROTOCOLS")
-        if not self.symm_file is None:
-            setupsymm = ET.SubElement(protocols, "Add", mover="setupsymm")
-        else:
-            setupdens = ET.SubElement(protocols, "Add", mover="setupdens")
-        loaddens = ET.SubElement(protocols, "Add", mover="loaddens")
+        if not self.map_file is None:
+            res_low = self._get_res_low(self.resolution)
+            report_fsc = ET.SubElement(movers, "ReportFSC", name="report_fsc", res_low=res_low, res_high=self.resolution)
+            if not self.symm_file is None:
+                setupsymm = ET.SubElement(protocols, "Add", mover="setupsymm")
+            else:
+                setupdens = ET.SubElement(protocols, "Add", mover="setupdens")
+            loaddens = ET.SubElement(protocols, "Add", mover="loaddens")
         if self.fastrelax:
             fast_relax = ET.SubElement(protocols, "Add", mover="relaxcart")
         if self.bb_min:
@@ -511,9 +551,10 @@ class FastRelaxDensity:
                 ET.SubElement(protocols, "Add", mover="cen5_{}".format(list(self.rebuild_steps.keys())[-1]))
             #ET.SubElement(protocols, "Add", mover="relaxcart_rebuild")
             #ET.SubElement(protocols, "Add", mover="relaxcart_rebuild")
-        if self.b_factor:
+        if self.b_factor and not self.map_file is None:
             bfactor = ET.SubElement(protocols, "Add", mover="fit_bs")
-        ET.SubElement(protocols, "Add", mover="report_fsc")
+        if not self.map_file is None:
+            ET.SubElement(protocols, "Add", mover="report_fsc")
         if self.rebuild:
             ET.SubElement(rosetta,
                         "OUTPUT",
@@ -627,17 +668,19 @@ class FastRelaxDensity:
                "-parser:protocol {}/{}".format(os.getcwd(),
                                                self.get_xml_filename(wt)),
                "-beta",
+               "-add_orbitals",
                "-ignore_unrecognized_res",
                "-score_symm_complex false",
-               "-edensity::mapreso {}".format(self.resolution),
                "-default_max_cycles 200",
                "-ignore_zero_occupancy false",
-               "-edensity::cryoem_scatterers",
                "-dna true",
                "-out::suffix _refined_{}".format(mdl),
-#               "-in:auto_setup_metals true",
-               "-crystal_refine",
+#              "-in:auto_setup_metals true",
                "-overwrite"]
+        if not self.map_file is None:
+            cmd_rosetta.extend(["-edensity::cryoem_scatterers",
+                                "-crystal_refine",
+                                "-edensity::mapreso {}".format(self.resolution)])
         if self.exclude_dna:
             cmd_rosetta.append("-dna_move false")
         else:
@@ -649,7 +692,7 @@ class FastRelaxDensity:
         #if self.constrain_to_start_coords:
         #    cmd_rosetta.append("-relax:constrain_relax_to_start_coords")
         if self.norepack:
-            cmd_rosetta.append("-prevent_repacking")
+            cmd_rosetta.append("-prevent_repacking true")
         # if not self.native_coords is None:
         #     cmd_rosetta.extend(["-in:file:native {}".format(self.native_coords),
         #                         "-relax:constrain_relax_to_native_coords",
@@ -862,8 +905,7 @@ def get_cli_args():
                                                  "Rosetta and phenix must be in the PATH.\n"
                                                  "Map file (.mrc), PDB file (.pdb), resolution.")
     parser.add_argument('--resolution', '-r',
-                        help='Effective resolution.',
-                        required=True)
+                        help='Effective resolution.')
     parser.add_argument('--test_map', '--test_map_file',
                         help='Map for validation (half map 2)',
                         action=CheckExt({'mrc'}))
@@ -968,6 +1010,9 @@ def get_cli_args():
                         help="Path to phenix bin directory.")
     parser.add_argument('--rosetta_path',
                         help="Path to rosetta_scripts executable.")
+    parser.add_argument('--debug',
+                        help="Enable debug mode.",
+                        action='store_true')
     args, unknown = parser.parse_known_args()
 
 
@@ -995,7 +1040,10 @@ def get_cli_args():
     args.params_files = params_files
 
     if map_file is None:
-        logger.error("No map file supplied.")
+        logger.info("No map file supplied. This will run FastRelax without density scoring.")
+    #    raise SystemExit
+    if not map_file is None and args.resolution is None:
+        logger.error("Resolution required.")
         raise SystemExit
     if pdb_file is None:
         logger.error("No pdb file supplied.")
@@ -1044,5 +1092,12 @@ if __name__ == '__main__':
     __spec__ = None
 
     args = get_cli_args()
+
+    #logger.setLevel(logging.DEBUG)
+    print(args)
+    if args[0].debug:
+        logger.setLevel(logging.DEBUG)
+    else:
+        logger.setLevel(logging.INFO)
     fastrelax_main(*args)
 

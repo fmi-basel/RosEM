@@ -99,3 +99,11 @@ Expected output:
 * `validation` - If validation was requested, the folder contains output from molprobity
 * `<JOBID>_<JOBNAME>.log` - Logfile from the pipeline
 * `submit_script` - If queue submission was used from the GUI, this file contains the submission commands
+
+## Licenses
+
+RosEM is licensed under the Apache License, Version 2.0.
+
+Icons are from the GTK framework, licensed under [GPL](https://gitlab.gnome.org/GNOME/gtk/-/blob/main/COPYING).
+
+Third-party software and libraries may be governed by separate terms and conditions or license provisions. Your use of the third-party software, libraries or code is subject to any such terms and you should check that you can comply with any applicable restrictions or terms and conditions before use.

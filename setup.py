@@ -10,4 +10,4 @@ setuptools.setup(
 		'rosem/icons': ['*.png',],
 		'rosem/config': ['config.conf',]},
      include_package_data=True,
-     scripts=['rosem/rosemcl.py', 'rosem/rosemgui.py', 'rosem/relax.py'],)
+     scripts=['rosem/rosemcl.py', 'rosem/rosemgui.py', 'rosem/relax.py', 'rosem/selection_parser.py'],)
