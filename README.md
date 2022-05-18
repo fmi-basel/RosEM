@@ -1,4 +1,4 @@
-# RosEM - Pipeline and GUI for real-space refinement using rosetta and phenix
+# RosEM - Pipeline and GUI for cryoEM model refinement using rosetta and phenix
 
 ## Introduction
 
