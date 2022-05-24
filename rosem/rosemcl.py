@@ -350,14 +350,14 @@ class FastRelaxDensity:
         ET.SubElement(score_function, "Reweight", scoretype="cart_bonded_angle", weight=str(self.angle_weight))
         ET.SubElement(score_function, "Reweight", scoretype="cart_bonded_torsion", weight=str(self.torsion_weight))
         ET.SubElement(score_function, "Reweight", scoretype="rama_prepro", weight=str(self.ramachandran_cst_weight))
-        ET.SubElement(score_function, "Reweight", scoretype="dna_bb_torsion", weight="0.6")
-        ET.SubElement(score_function, "Reweight", scoretype="dna_sugar_close", weight="0856")
-        ET.SubElement(score_function, "Reweight", scoretype="dna_chi", weight="0.5")
-        ET.SubElement(score_function, "Reweight", scoretype="orbitals_hpol_bb", weight="0.2")
-        ET.SubElement(score_function, "Reweight", scoretype="pci_cation_pi", weight="0.5")
-        ET.SubElement(score_function, "Reweight", scoretype="pci_pi_pi", weight="0.065")
-        ET.SubElement(score_function, "Reweight", scoretype="pci_salt_bridge", weight="0.32")
-        ET.SubElement(score_function, "Reweight", scoretype="pci_hbond", weight="0.3")
+        #ET.SubElement(score_function, "Reweight", scoretype="dna_bb_torsion", weight="0.6")
+        #ET.SubElement(score_function, "Reweight", scoretype="dna_sugar_close", weight="0856")
+        #ET.SubElement(score_function, "Reweight", scoretype="dna_chi", weight="0.5")
+        #ET.SubElement(score_function, "Reweight", scoretype="orbitals_hpol_bb", weight="0.2")
+        #ET.SubElement(score_function, "Reweight", scoretype="pci_cation_pi", weight="0.5")
+        #ET.SubElement(score_function, "Reweight", scoretype="pci_pi_pi", weight="0.065")
+        #ET.SubElement(score_function, "Reweight", scoretype="pci_salt_bridge", weight="0.32")
+        #ET.SubElement(score_function, "Reweight", scoretype="pci_hbond", weight="0.3")
 
 
 
