@@ -67,6 +67,20 @@ class ExecPath:
         if exec_path:
             self.path_dict[program] = os.path.dirname(exec_path)
             return True
+        
+        # Try common SBGrid variants
+        variants = [
+            f"{exec_name}.static.linuxgccrelease",
+            f"{exec_name}.static.macosclangrelease", 
+            f"{exec_name}.default.linuxgccrelease"
+        ]
+        
+        for variant in variants:
+            exec_path = shutil.which(variant)
+            if exec_path:
+                self.path_dict[program] = os.path.dirname(exec_path)
+                return True
+        
         return False
 
     def set_exec(self, program, exec_name, exclude=None):
