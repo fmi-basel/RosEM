@@ -22,6 +22,7 @@ from rosem.selection_parser import ResidueSelection
 import rosem.validation as validation
 import logging
 from multiprocessing import Pool
+import shutil
 from shutil import copyfile
 #import rank_models
 import sys
@@ -61,19 +62,16 @@ class ExecPath:
     def get_exec(self, exec_name):
         return self.exec_path_dict[exec_name]
 
-    def find(self, program):
-        found = False
-        path = os.environ['PATH'].split(':')
-        for p in path:
-            logger.debug(p)
-            if re.search('{}.*/bin'.format(program), p):
-                self.path_dict[program] = p
-                found = True
-        return found
+    def find(self, program, exec_name):
+        exec_path = shutil.which(exec_name)
+        if exec_path:
+            self.path_dict[program] = os.path.dirname(exec_path)
+            return True
+        return False
 
     def set_exec(self, program, exec_name, exclude=None):
         if self.get(program) is None:
-            if not self.find(program):
+            if not self.find(program, exec_name):
                 logger.error(
                     "{a} not found in the path. Add {a} binary directory to system path or specify with --{b}_path.".format(a=exec_name, b=program))
                 raise SystemExit

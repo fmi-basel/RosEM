@@ -1,0 +1,17 @@
+[workspace]
+channels = ["conda-forge"]
+name = "RosEM"
+platforms = ["osx-arm64"]
+version = "20250605"
+
+[tasks]
+
+[dependencies]
+pip = "*"
+numpy = "*"
+pandas = "*"
+pyparsing = "*"
+sqlalchemy = "<2"
+
+[pypi-dependencies]
+pyqt5 = "*"
