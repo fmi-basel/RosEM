@@ -6,3 +6,7 @@ rosem.egg-info
 .DS_Store
 rosem/remove_subcls.sh
 env
+
+# pixi environments
+.pixi
+*.egg-info
