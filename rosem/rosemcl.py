@@ -242,7 +242,7 @@ class FastRelaxDensity:
         self.path.register('rosetta', rosetta_path)
         self.path.set_exec('phenix', 'phenix.molprobity')
         self.path.set_exec('phenix', 'phenix.real_space_refine')
-        self.path.set_exec('rosetta', 'rosetta_scripts', 'python|mpi')
+        self.path.set_exec('rosetta', 'rosetta_scripts', 'python|mpi|multistage')
         if not self.logging_mode == 'file':
             ch = logging.StreamHandler()
             logger.addHandler(ch)
@@ -521,8 +521,7 @@ class FastRelaxDensity:
                 fast_relax.set("bondlength", "0")
 
 
-        if not self.test_map is None:
-            report_fsc.set("testmap", self.test_map)
+
         protocols = ET.SubElement(rosetta, "PROTOCOLS")
         if not self.map_file is None:
             res_low = self._get_res_low(self.resolution)
@@ -532,6 +531,8 @@ class FastRelaxDensity:
             else:
                 setupdens = ET.SubElement(protocols, "Add", mover="setupdens")
             loaddens = ET.SubElement(protocols, "Add", mover="loaddens")
+            if not self.test_map is None:
+                report_fsc.set("testmap", self.test_map)
         if self.fastrelax:
             fast_relax = ET.SubElement(protocols, "Add", mover="relaxcart")
         if self.bb_min:
