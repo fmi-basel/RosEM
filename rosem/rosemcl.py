@@ -669,7 +669,7 @@ class FastRelaxDensity:
                "-parser:protocol {}/{}".format(os.getcwd(),
                                                self.get_xml_filename(wt)),
                "-beta",
-               "-add_orbitals",
+               #"-add_orbitals",
                "-ignore_unrecognized_res",
                "-score_symm_complex false",
                "-default_max_cycles 200",
