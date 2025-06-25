@@ -617,6 +617,7 @@ class FastRelaxDensity:
                    "reference_model.file={}".format(reference_model),
                    "run_validation=False"]
             cmd = ' '.join(cmd)
+            logger.info(f"Command: {cmd}")
             try:
                 with open('reference_model.log', 'w') as f:
                     p = Popen(cmd, shell=True, stdin=PIPE, stdout=f)

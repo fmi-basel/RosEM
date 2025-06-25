@@ -54,10 +54,13 @@ ch = logging.StreamHandler()
 ch.setFormatter(formatter)
 logger.addHandler(ch)
 
-def excepthook(exc_type, exc_value, exc_tb):
-    tb = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
-    logger.error("Error in GUI!:")
-    logger.error("Traceback:\n", tb)
+def handle_exception(exc_type, exc_value, exc_traceback):
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+
+    logger.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+
 
 def main():
     shared_objects = [Project(),  FastRelaxParams(), Job(), Validation(), Settings()]
@@ -68,7 +71,7 @@ def main():
     for obj in shared_objects:
         obj.set_db(db)
 
-    sys.excepthook = excepthook
+    sys.excepthook = handle_exception
     app = QtWidgets.QApplication(sys.argv)
     mainframe = MainFrame(shared_objects, DefaultValues(), db, sess, install_path)
     app.exec_()
@@ -125,7 +128,6 @@ class MainFrame(QtWidgets.QMainWindow):
         self.files_selected_item = None
         self.gui_params['project_id'] = None
         self.gui_params['job_id'] = None
-        self.gui_params['queue_job_id'] = None
         self.gui_params['job_project_id'] = None
         self.gui_params['job_name'] = "FastRelaxDens"
         self.gui_params['other_settings_changed'] = False
@@ -484,8 +486,6 @@ class MainFrame(QtWidgets.QMainWindow):
                 #job_params['job_path'] = job_path
                 job_params['phenix_path'] = settings.phenix_path
                 job_params['rosetta_path'] = settings.rosetta_path
-                job_params['queue_template'] = settings.queue_template
-                job_params['queue_submit'] = settings.queue_submit
                 self.gui_params['job_id'] = job_id
 
                 #Start thread
@@ -531,25 +531,6 @@ class MainFrame(QtWidgets.QMainWindow):
     def OnBtnCancel(self):
         if self.gui_params['job_id'] is None:
             message_dlg('Error', 'No Job selected!', 'Error')
-        elif not self.gui_params['queue_job_id'] is None:
-            settings = self.settings.get_from_db(self.sess)
-            queue_cancel = settings.queue_cancel
-            host = self.job.get_host(self.gui_params['job_id'], self.sess)
-            current_host = socket.gethostname()
-            if host == current_host:
-                if not queue_cancel == "" and not queue_cancel is None:
-                    queue_job_id = self.gui_params['queue_job_id']
-                    cmd = [queue_cancel, queue_job_id]
-                    try:
-                        Popen(cmd)
-                    except:
-                        cmd = ' '.join(cmd)
-                        message_dlg('Error', f'Cannot cancel job. The command was {cmd}!')
-                else:
-                    message_dlg('Error', 'No cancel command for queue submission method defined!')
-            else:
-                message_dlg('Error', f'Cannot cancel this job because it was started on a different host ({host})'
-                              f' and current host is {current_host}!')
         else:
             pid = self.job.get_pid(self.gui_params['job_id'], self.sess)
             host = self.job.get_host(self.gui_params['job_id'], self.sess)

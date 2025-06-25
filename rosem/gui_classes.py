@@ -633,7 +633,6 @@ class FastRelaxParams(GUIVariables):
         self.nproc = Variable('nproc', 'int', ctrl_type='sbo')
         self.selection = Variable('selection', 'str', ctrl_type='pte')
         self.validation = Variable('validation', 'bool', ctrl_type='chk')
-        self.queue = Variable('queue', 'bool', ctrl_type='chk')
         self.bfactor = Variable('bfactor', 'bool', ctrl_type='chk')
         self.fastrelax = Variable('fastrelax', 'bool', ctrl_type='chk')
         self.norepack = Variable('norepack', 'bool', ctrl_type='chk')
@@ -914,7 +913,6 @@ class Job(GUIVariables):
         self.log_file = Variable('log_file', 'str', db=True)
         self.status = Variable('status', 'str', db=True)
         self.pid = Variable('pid', 'str', db=True)
-        self.queue = Variable('queue', 'str', db=True)
         self.host = Variable('host', 'str', db=True)
         self.path = Variable('path', 'str', db=True)
 
@@ -965,16 +963,6 @@ class Job(GUIVariables):
         result = sess.query(self.db.Job).get(job_id)
         return result.pid
 
-    def get_queue_job_id(self, log_file):
-        queue_job_id = None
-        with open(log_file, 'r') as f:
-            lines = f.readlines()
-        regex = re.compile("QUEUE_JOB_ID=(\d+)")
-        for l in lines:
-            if re.search(regex, l):
-                queue_job_id = re.search(regex, l).group(1)
-        return queue_job_id
-
     def get_host(self, job_id, sess):
         result = sess.query(self.db.Job).get(job_id)
         return result.host
@@ -998,27 +986,6 @@ class Job(GUIVariables):
                       "Torsional": "torsional"}
         cmd_dict['space'] = conversion[cmd_dict['space']]
 
-    def prepare_submit_script(self, queue_template, job_params, job_args):
-        cpu = job_params["nproc"]
-        #mem = os.path.getsize(job_params['map_file']) + 1000000
-        #1 GB default per process
-        mem = 1000000
-        command = ['rosemcl.py'] + job_args
-        command = ' '.join(command)
-        logfile = job_params["log_file"]
-        submit_script = f"{job_params['job_path']}/submit_script"
-        copyfile(queue_template, submit_script)
-        with open(queue_template, 'r') as f:
-            data = f.read()
-        data = data.replace("{{cpu}}", f"{cpu}")
-        data = data.replace("{{mem-per-cpu}}", f"{mem}")
-        data = data.replace("{{command}}", f"{command}")
-        data = data.replace("{{logfile}}", f"{logfile}")
-        with open(submit_script, 'w') as f:
-            f.write(data)
-        return submit_script
-
-
     def prepare_cmd(self, job_params):
         cmd_dict = job_params.copy()
         #self.convert_protocol(cmd_dict)
@@ -1032,24 +999,11 @@ class Job(GUIVariables):
                 if not v is None:
                     cmd_dict[k] = f"\"{v}\""
         cmd_dict = {k: v for k, v in cmd_dict.items() if not v is None}
-        del cmd_dict['queue']
-        del cmd_dict['queue_template']
-        del cmd_dict['queue_submit']
         logger.debug(cmd_dict)
         job_args = ['--{} {}'.format(k, v) if not k in excluded_args else v for k, v in cmd_dict.items()]
         logger.debug(job_args)
         job_args = [re.sub(r'\sTrue', '', x) for x in job_args if not x is None if not re.search(r'\sFalse', x)]
-        if job_params['queue']:
-            #dlg = self.dlg_queue
-            #if dlg.ShowModal():
-            #    dlg.Close()
-            queue_template = job_params['queue_template']
-            queue_submit = job_params['queue_submit']
-            submit_script = self.prepare_submit_script(queue_template, job_params, job_args)
-
-            cmd = [queue_submit, submit_script]
-        else:
-            cmd = ['rosemcl.py'] + job_args
+        cmd = ['rosemcl.py'] + job_args
         logger.debug("Job command\n{}".format(cmd))
         return cmd
 
@@ -1264,9 +1218,6 @@ class Settings(GUIVariables):
         self.id = Variable('id', 'int', db_primary_key=True)
         self.rosetta_path = Variable('rosetta_path', 'str', ctrl_type='lei')
         self.phenix_path = Variable('phenix_path', 'str', ctrl_type='lei')
-        self.queue_template = Variable('queue_template', 'str', ctrl_type='lei')
-        self.queue_submit = Variable('queue_submit', 'str', ctrl_type='lei')
-        self.queue_cancel = Variable('queue_cancel', 'str', ctrl_type='lei')
         self.global_config = Variable('global_config', 'bool', ctrl_type='chk')
 
     def set_db(self, db):
@@ -1332,21 +1283,27 @@ class Settings(GUIVariables):
             logger.debug("check phenix")
             self.path.set_exec('phenix', 'phenix.validation_cryoem')
             logger.debug("check phenix")
-        except (SystemExit, FileNotFoundError):
+        except FileNotFoundError:
             messages.append("Phenix executables not found. Check path in settings!")
         try:
             self.path.set_exec('phenix', 'phenix.real_space_refine')
         except FileNotFoundError:
             messages.append("Phenix executables not found. Check path in settings!")
             pass
-        except (SystemExit, FileNotFoundError):
+        except NotADirectoryError:
+            messages.append("Phenix executables could not be set because the given path is not a directory.")
+            pass
+        except SystemExit:
             pass
         try:
             self.path.set_exec('rosetta', 'rosetta_scripts', 'python|mpi')
         except FileNotFoundError:
             messages.append("Rosetta executables not found. Check path in settings!")
             pass
-        except (SystemExit, FileNotFoundError):
+        except NotADirectoryError:
+            messages.append("Rosetta executables could not be set because the given path is not a directory.")
+            pass
+        except SystemExit:
             pass
 
 
@@ -1392,9 +1349,6 @@ class Settings(GUIVariables):
             logger.debug("Adding frist entry to settings")
             self.db_insert_settings([{'rosetta_path': '',
                                      'phenix_path': '',
-                                     'queue_template': '',
-                                     'queue_submit': '',
-                                     'queue_cancel': '',
                                      'global_config': False}], sess)
 
 

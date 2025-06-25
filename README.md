@@ -98,7 +98,6 @@ Expected output:
 * `job_w<weight>` - Folder containing rosetta_scripts instructions (*.xml), individual models (*.pdb), rosetta command line scripts (*.sh), and rosetta logfiles (*.pdb)
 * `validation` - If validation was requested, the folder contains output from molprobity
 * `<JOBID>_<JOBNAME>.log` - Logfile from the pipeline
-* `submit_script` - If queue submission was used from the GUI, this file contains the submission commands
 
 ## Licenses
 

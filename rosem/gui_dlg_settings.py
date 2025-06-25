@@ -27,10 +27,8 @@ class SettingsDlg(QtWidgets.QDialog):
         uic.loadUi(pkg_resources.resource_filename('rosem', 'settings.ui'), self)
         self.btn_rosetta = self.findChild(QtWidgets.QToolButton, 'btn_settings_choose_folder_rosetta')
         self.btn_phenix = self.findChild(QtWidgets.QToolButton, 'btn_settings_choose_folder_phenix')
-        self.btn_template = self.findChild(QtWidgets.QToolButton, 'btn_settings_choose_template')
         self.btn_rosetta.setIcon(QIcon(pkg_resources.resource_filename('rosem.icons', 'gtk-open.png')))
         self.btn_phenix.setIcon(QIcon(pkg_resources.resource_filename('rosem.icons', 'gtk-open.png')))
-        self.btn_template.setIcon(QIcon(pkg_resources.resource_filename('rosem.icons', 'gtk-open.png')))
         self.settings.set_controls(self, self.settings.db_table)
         self.bind_event_handlers()
         self.init()
@@ -38,7 +36,6 @@ class SettingsDlg(QtWidgets.QDialog):
     def bind_event_handlers(self):
         self.btn_rosetta.clicked.connect(self.OnBtnChooseFolderRosetta)
         self.btn_phenix.clicked.connect(self.OnBtnChooseFolderPhenix)
-        self.btn_template.clicked.connect(self.OnBtnChooseFolderQueueTemplate)
         self.accepted.connect(self.OnBtnOk)
 
     def init(self):
@@ -50,7 +47,7 @@ class SettingsDlg(QtWidgets.QDialog):
         logger.debug("OnBtnChooseFolderPhenix")
         dlg = QtWidgets.QFileDialog()
         if dlg.exec_():
-            path = dlg.selectedFiles()[0]
+            path = dlg.getExistingDirectory(self, 'Select Folder')
 
             self.settings.phenix_path.set_value(path)
             self.settings.phenix_path.ctrl.setText(path)
@@ -59,19 +56,10 @@ class SettingsDlg(QtWidgets.QDialog):
         logger.debug("OnBtnChooseFolderRosetta")
         dlg = QtWidgets.QFileDialog()
         if dlg.exec_():
-            path = dlg.selectedFiles()[0]
+            path = dlg.getExistingDirectory(self, 'Select Folder')
 
             self.settings.rosetta_path.set_value(path)
             self.settings.rosetta_path.ctrl.setText(path)
-
-    def OnBtnChooseFolderQueueTemplate(self):
-        logger.debug("OnBtnChooseFolderQueueTemplate")
-        dlg = QtWidgets.QFileDialog()
-        if dlg.exec_():
-            path = dlg.selectedFiles()[0]
-            logger.debug(path)
-            self.settings.queue_template.set_value(path)
-            self.settings.queue_template.ctrl.setText(path)
 
     def OnBtnOk(self):
         #utils.update_var_values(self.prj)
