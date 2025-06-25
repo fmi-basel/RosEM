@@ -15,6 +15,8 @@ https://www.rosettacommons.org/software/license-and-download
 
 https://phenix-online.org/download/
 
+Compatibility was tested against phenix v1.21.2 and rosetta v3.14.
+
 ### Installation (Anaconda) ***recommended***
 
 ```
@@ -37,6 +39,7 @@ Tested on Linux Ubuntu 18.x and MacOS BigSur
 ### Installation (Virtualenv)
 
 Dependencies
+Python>=3.10
 Qt5
 
 ```

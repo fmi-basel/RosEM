@@ -14,9 +14,13 @@
 import os
 import re
 from subprocess import Popen, PIPE
+
+from dataclasses import dataclass, asdict
+from typing import Optional
 import rosem.utils as utils
 import json
 import logging
+import sys
 
 logger = logging.getLogger("RosEM")
 
@@ -44,43 +48,62 @@ def get_fsc_test(model):
                     pass
         return fsc
 
+
+@dataclass
+class Stats:
+    bond_rmsd: Optional[float] = None
+    angle_rmsd: Optional[float] = None
+    planarity_rmsd: Optional[float] = None
+    dihedral_rmsd: Optional[float] = None
+    min_distance: Optional[float] = None
+    clashscore: Optional[float] = None
+    ramas: Optional[float] = None
+    rotamers: Optional[float] = None
+    cbeta: Optional[float] = None
+    cis_proline: Optional[float] = None
+    cis_general: Optional[float] = None
+    twisted_proline: Optional[float] = None
+    twisted_general: Optional[float] = None
+
 def _get_validation_results(file):
     with open(file, 'r') as f:
         lines = f.readlines()
     m = re.match(".*_w(\d+).*", file)
     weight = m.group(1)
     stats_section = False
+
+    stats = Stats()
     for line in lines:
         if re.search("Molprobity validation", line):
             stats_section = True
-        elif stats_section:
+        if stats_section:
             #print(line)
             if re.search("\s+Bond\s+", line):
-                bond_rmsd = line.split()[2]
+                stats.bond_rmsd = line.split()[2]
             elif re.search("Angle", line):
-                angle_rmsd = line.split()[2]
+                stats.angle_rmsd = line.split()[2]
             elif re.search("Planarity", line):
-                planarity_rmsd = line.split()[2]
+                stats.planarity_rmsd = line.split()[2]
             elif re.search("Dihedral", line):
-                dihedral_rmsd = line.split()[2]
-            elif re.search("Min Nonbonded Distance", line):
-                min_distance = line.split()[4]
-            elif re.search("All-atom Clashscore", line):
-                clashscore = line.split()[3]
-            elif re.search("\s*\s{2}Outliers\s+", line):
-                ramas = line.split()[2]
-            elif re.search("Rotamer Outliers", line):
-                rotamers = line.split()[3]
-            elif re.search("Cbeta Deviations", line):
-                cbeta = line.split()[3]
+                stats.dihedral_rmsd = line.split()[2]
+            elif re.search(r"Min\s[Nn]onbonded\s[Dd]istance", line):
+                stats.min_distance = line.split()[4]
+            elif re.search(r"All-atom\s[Cc]lashscore", line):
+                stats.clashscore = line.split()[3]
+            elif re.search(r"\s*\s{2}[Oo]utliers\s+", line):
+                stats.ramas = line.split()[2]
+            elif re.search(r"Rotamer\s[Oo]utliers", line):
+                stats.rotamers = line.split()[3]
+            elif re.search(r"Cbeta\s[Dd]eviations", line):
+                stats.cbeta = line.split()[3]
             elif re.search("Cis-proline", line):
-                cis_proline = line.split()[2]
+                stats.cis_proline = line.split()[2]
             elif re.search("Cis-general", line):
-                cis_general = line.split()[2]
-            elif re.search("Twisted Proline", line):
-                twisted_proline = line.split()[3]
-            elif re.search("Twisted General\s+:", line):
-                twisted_general = line.split()[3]
+                stats.cis_general = line.split()[2]
+            elif re.search(r"Twisted\s[Pp]roline", line):
+                stats.twisted_proline = line.split()[3]
+            elif re.search(r"Twisted\s[Gg]eneral\s+:", line):
+                stats.twisted_general = line.split()[3]
             # elif re.search("CC_mask", line):
             #     cc_mask = line.split()[2]
             # elif re.search("CC_volume", line):
@@ -93,28 +116,9 @@ def _get_validation_results(file):
     if stats_section is False:
         logger.debug("Error reading file.")
     else:
-        stats = {
-            'weight': weight,
-            'bonds': bond_rmsd,
-            'angles': angle_rmsd,
-            'planarity': planarity_rmsd,
-            'dihedral': dihedral_rmsd,
-            'min_distance': min_distance,
-            'clashscore': clashscore,
-            'ramas': ramas,
-            'rotamers': rotamers,
-            'cbeta': cbeta,
-            'cis_proline': cis_proline,
-            'cis_general': cis_general,
-            'twisted_proline': cis_proline,
-            'twisted_general': twisted_general,
+        stats_dict = asdict(stats)
 
-            # 'cc_mask': cc_mask,
-            # 'cc_volume': cc_volume,
-            # 'cc_peaks': cc_peaks,
-            # 'cc_box': cc_box,
-        }
-        return stats
+        return stats_dict
 
 def run_validation(model, exec_path, stage='post-ref'):
     cmd = [exec_path,
@@ -139,3 +143,7 @@ def run_validation(model, exec_path, stage='post-ref'):
         return stats
     else:
         logger.debug("No validation output found.")
+
+
+if __name__ == '__main__':
+    print(run_validation(sys.argv[1], sys.argv[2]))
