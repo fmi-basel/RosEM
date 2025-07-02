@@ -270,8 +270,7 @@ class ResidueSelection:
             logger.debug(self.converted_lst)
             return self.converted_lst
 
-
-if __name__ == '__main__':
+def main():
     logger = logging.getLogger('RosEM')
     formatter = logging.Formatter("[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s")
     logger.setLevel(logging.DEBUG)
@@ -279,18 +278,6 @@ if __name__ == '__main__':
     ch.setFormatter(formatter)
     logger.addHandler(ch)
     ResidueSelection(sys.argv[1]).get_list()
-# <RESIDUE_SELECTORS>
-# <ResidueName name="PTD_LYX" residue_names="PTD,LYX" />
-# </RESIDUE_SELECTORS>
-# <MOVE_MAP_FACTORIES>
-# <MoveMapFactory name="fr_mm_factory" bb="0" chi="0">
-# <Backbone residue_selector="PTD_LYX" />
-# <Chi residue_selector="PTD_LYX" />
-# </MoveMapFactory>
-# </MOVE_MAP_FACTORIES>
 
-
-
-
-#selection_string = "((a) and c)"
-#ResidueSelection(selection_string)
+if __name__ == '__main__':
+    main()

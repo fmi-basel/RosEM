@@ -1,8 +1,0 @@
-name: rosem-conda
-dependencies:
-  - python=3.6
-  - pyqt
-  - sqlalchemy
-  - pandas
-  - numpy
-  - pyparsing

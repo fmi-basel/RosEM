@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rosem"
+version = "0.2.0"
+authors = [{ name = "Georg Kempf", email = "georg.kempf@fmi.ch" }]
+readme = "README.md"
+requires-python = ">=3.10"
+license = {file = "LICENSE"}
+dependencies = [
+        "pandas",
+        "numpy",
+        "pyparsing==2.4.5",
+        "SQLAlchemy==1.3.19",
+        "PyQt5==5.15.4"
+        ]
+
+[project.scripts]
+rosemgui = "rosem.rosemgui:main"
+rosemcl = "rosem.rosemcl:main"
+relax = "rosem.relax:main"
+selection_parser = "rosem.selection_parser:main"
+
+

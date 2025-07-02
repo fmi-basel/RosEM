@@ -1089,10 +1089,8 @@ def fastrelax_main(args, unknown, map_file, pdb_file, cst_file, symm_file):
                 f.write("\nJob finished with exit code 1")
             traceback.print_exc()
 
-
-if __name__ == '__main__':
+def main():
     __spec__ = None
-
     args = get_cli_args()
 
     #logger.setLevel(logging.DEBUG)
@@ -1103,3 +1101,6 @@ if __name__ == '__main__':
         logger.setLevel(logging.INFO)
     fastrelax_main(*args)
 
+
+if __name__ == '__main__':
+    main()

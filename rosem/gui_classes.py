@@ -1003,7 +1003,7 @@ class Job(GUIVariables):
         job_args = ['--{} {}'.format(k, v) if not k in excluded_args else v for k, v in cmd_dict.items()]
         logger.debug(job_args)
         job_args = [re.sub(r'\sTrue', '', x) for x in job_args if not x is None if not re.search(r'\sFalse', x)]
-        cmd = ['rosemcl.py'] + job_args
+        cmd = ['rosemcl'] + job_args
         logger.debug("Job command\n{}".format(cmd))
         return cmd
 

@@ -93,7 +93,7 @@
     </rect>
    </property>
    <property name="text">
-    <string>Version 0.1 ALPHA</string>
+    <string>Version 0.2</string>
    </property>
    <property name="alignment">
     <set>Qt::AlignCenter</set>

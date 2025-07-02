@@ -13,8 +13,10 @@
 #limitations under the License.
 import rosem.rosemcl
 from rosem.rosemcl import FastRelaxDensity, get_cli_args, fastrelax_main
+def main():
+    args = get_cli_args()
+    args[0].fastrelax = True
+    fastrelax_main(*args)
 
-args = get_cli_args()
-args[0].fastrelax = True
-fastrelax_main(*args)
-
+if __name__ == '__main__':
+    main()

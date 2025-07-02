@@ -17,19 +17,19 @@ https://phenix-online.org/download/
 
 Compatibility was tested against phenix v1.21.2 and rosetta v3.14.
 
-### Installation (Anaconda) ***recommended***
+### Installation (conda) ***recommended***
 
 ```
 cd /some/directory/
 git clone https://github.com/fmi-basel/RosEM.git
-conda env create --file RosEM/rosem-conda.yml
+conda env create rosem-conda python=3.10
 conda activate rosem-conda
 cd RosEM
-python3 setup.py install
+python3 -m pip install .
 # GUI
-rosemgui.py
+rosemgui
 # Commandline app
-relax.py
+rosemcl
 ```
 
 Make sure rosetta and phenix executables are in the PATH. If not you need to specify them manually in the GUI settings or use respective flags in the command line app.
@@ -48,9 +48,9 @@ git clone https://github.com/fmi-basel/RosEM.git
 python3 -m venv rosem-env
 source rosem-env/bin/activate
 pip install --upgrade pip
-pip install -r RosEM/requirements.txt
 cd RosEM
-python3 setup.py install
+python3 -m pip install .
+
 ```
 ## Usage
 
@@ -74,12 +74,12 @@ Command line
 ```
 mkdir some_jobname
 cd some_jobname
-relax.py --help
+rosemcl --help
 ```
 
 Minimum input:
 ```
-relax.py map.mrc model.pdb -r 3.0
+rosemcl map.mrc model.pdb -r 3.0
 ```
 
 By default the pipeline will generate 5 models and select the best one based on FSC correlation.
