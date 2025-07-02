@@ -2,9 +2,9 @@
 
 ## Introduction
 
-The GUI and command-line apps provide easy access to the rosetta cryoem refinement protocol by Frank DiMaio and co. The pipeline automates testing of different density weights, use of reference/starting model restraints and selections.
+The GUI and command-line apps provide easy access to the rosetta cryo-EM refinement protocol by Frank DiMaio et al. The pipeline automates testing of different density weights, use of reference/starting model restraints and selections.
 
-At the moment only the fastrelax protocol based on this tutorial (https://faculty.washington.edu/dimaio/files/rosetta_density_tutorial_aug18_1.pdf) is implemented.
+At the moment only the FastRelax protocol based on this tutorial (https://faculty.washington.edu/dimaio/files/rosetta_density_tutorial_aug18_1.pdf) is implemented.
 
 
 ## Installation
@@ -109,3 +109,12 @@ RosEM is licensed under the Apache License, Version 2.0.
 Icons are from the GTK framework, licensed under [GPL](https://gitlab.gnome.org/GNOME/gtk/-/blob/main/COPYING).
 
 Third-party software and libraries may be governed by separate terms and conditions or license provisions. Your use of the third-party software, libraries or code is subject to any such terms and you should check that you can comply with any applicable restrictions or terms and conditions before use.
+
+## Acknowledgments
+
+The density-guided FastRelax and B-factor refinement protocols are adapted from a [tutorial](https://faculty.washington.edu/dimaio/files/rosetta_density_tutorial_aug18_1.pdf) by Frank DiMaio et al. 
+
+## Citations
+
+### Relevant citations for the adapted protocols
+[Wang et al., 2016: Automated structure refinement of macromolecular assemblies from cryo-EM maps using Rosetta](https://doi.org/10.7554/eLife.17219)

@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>338</width>
-    <height>300</height>
+    <height>272</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -43,7 +43,7 @@
      <x>10</x>
      <y>110</y>
      <width>319</width>
-     <height>90</height>
+     <height>114</height>
     </rect>
    </property>
    <layout class="QVBoxLayout" name="verticalLayout">
@@ -78,6 +78,13 @@
      <widget class="QLabel" name="label_5">
       <property name="text">
        <string>License: Apache 2.0</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QLabel" name="label_7">
+      <property name="text">
+       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Rosetta refinement protocol adapted from: &lt;a href=&quot;https://faculty.washington.edu/dimaio/files/rosetta_density_tutorial_aug18.pdf&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#0000ff;&quot;&gt;Link&lt;/span&gt;&lt;/a&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
       </property>
      </widget>
     </item>
