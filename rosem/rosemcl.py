@@ -23,28 +23,15 @@ import rosem.validation as validation
 import logging
 from multiprocessing import Pool
 from shutil import copyfile
-#import rank_models
 import sys
 import re
 import traceback
 import signal
 from contextlib import closing
-#from convert_restraints_p2r import ConvertRestraints
 from xml.dom import minidom
 import json
 
 
-#ch = logging.StreamHandler()
-#logger.addHandler(ch)
-
-# class ValidateModelMP(validation.Validation):
-#     def __init__(self):
-#         super().__init__()
-#         self.results = []
-#
-#     def run_validation_mp(self, results_q, model, map, resolution):
-#         print("run validation")
-#         results_q.put(self.run_validation(model, map, resolution))
 logger = logging.getLogger("RosEM")
 
 class ExecPath:
@@ -107,11 +94,9 @@ class FastRelaxDensity:
                  cst_weight=None,
                  resolution=None,
                  weight=[],
-                 #b_factor=False,
                  space="cartesian",
                  fastrelax=True,
                  norepack=False,
-                 #protocol="1",
                  constrain_side_chains=False,
                  exclude_dna=False,
                  self_restraints=False,
@@ -121,7 +106,6 @@ class FastRelaxDensity:
                  num_models=1,
                  num_cycles=1,
                  bfactor=False,
-                 #torsional=False,
                  nproc=1,
                  ranking_method='fsc',
                  selection=None,
@@ -214,10 +198,6 @@ class FastRelaxDensity:
                               "Q:0.81,H:0.81,N:0.81,T:0.81,S:0.81,Y:0.88," \
                               "W:0.88,A:0.88,F:0.88,P:0.88,I:0.88,L:0.88,V:0.88"
         self.space = space.lower()
-        #self.protocol = protocol
-        self.rebuild = False
-        self.rebuild_rms="1.5"
-        self.rebuild_strategy=None
         self.num_cycles = num_cycles
         self.exclude_dna = exclude_dna
         self.nproc = nproc
@@ -231,12 +211,7 @@ class FastRelaxDensity:
         self.selection_str = selection
         self._space_parser()
         #Static
-        self.rebuild_steps = {'50': -0.5, '60': -0.3, '70': -0.1, '80': 0.0}
         self.base_dir = os.getcwd()
-        #self.results_queue = Queue()
-        #Logging
-        #logger = logging.getLogger("RosEM")
-        #logger.setLevel(logging.DEBUG)
         self.path = ExecPath(logger)
         self.path.register('phenix', phenix_path)
         self.path.register('rosetta', rosetta_path)
@@ -271,32 +246,6 @@ class FastRelaxDensity:
         elif self.space == "torsional":
             self.torsional = True
 
-    # def _strategy_parser(self):
-    #     if self.space == "cartesian":
-    #         self.cartesian = True
-    #     elif self.space == "torsional":
-    #         self.torsional = True
-    #     if self.protocol is None:
-    #         self.protocol = 1
-    #     if self.protocol == 1:
-    #         self.fastrelax = True
-    #     elif self.protocol == 2:
-    #         self.bb_min = True
-    #     elif self.protocol == 3:
-    #         self.allatom_min = True
-    #     elif self.protocol == 4:
-    #         self.rebuild_strategy = "auto"
-    #         self.rebuild = True
-    #     elif self.protocol == 5:
-    #         self.rebuild_strategy = "rama"
-    #         self.rebuild = True
-    #     elif self.protocol == 6:
-    #         self.b_factor = True
-    #     else:
-    #         logging.error("Given strategy key not found.")
-
-
-
     def _generate_xml(self, wt):
         '''
         Generates the input xml for rosetta_scripts based on variables.
@@ -306,26 +255,7 @@ class FastRelaxDensity:
         #Scorefxns#
         ###########
         scorefxns = ET.SubElement(rosetta, "SCOREFXNS")
-        #Switch score function if torsional refinment requested.
-        #< ScoreFunctionname = "cen"
-        #weights = "score4_smooth_cart" > < Reweight
-        #scoretype = "elec_dens_fast"
-        #weight = "20" / > < / ScoreFunction >
 
-        if self.bb_min or self.rebuild:
-            score_function = ET.SubElement(scorefxns,
-                                           "ScoreFunction",
-                                           name="cen",
-                                           weights="score4_smooth_cart",
-                                           )
-        if self.rebuild:
-            score_function_soft = ET.SubElement(scorefxns,
-                                           "ScoreFunction",
-                                           name="dens_soft",
-                                           weights="beta_soft")
-            reweight_cart_bonded = ET.SubElement(score_function_soft, "Reweight", scoretype="cart_bonded", weight="2.0")
-            #reweight_pro_close = ET.SubElement(score_function_soft, "Reweight", scoretype="pro_close", weight="0")
-            reweight_elec_dens_fast = ET.SubElement(score_function_soft, "Reweight", scoretype="elec_dens_fast", weight=wt)
         if self.torsional:
             score_function = ET.SubElement(scorefxns, "ScoreFunction", name="dens", weights="beta")
         else:
@@ -339,27 +269,16 @@ class FastRelaxDensity:
                   scale_sc_dens_byres=self.sc_weights)
         else:
             score_function.set("name", "nodens")
-        #Reweight constraints .
+        #Reweight constraints
         ET.SubElement(score_function, "Reweight", scoretype="atom_pair_constraint", weight=str(self.distance_cst_weight))
         ET.SubElement(score_function, "Reweight", scoretype="dihedral_constraint", weight=str(self.dihedral_cst_weight))
         ET.SubElement(score_function, "Reweight", scoretype="angle_constraint", weight=str(self.angle_cst_weight))
-        #Reweight density scoring according to input weight
 
         #Reweight cartesian bonds and angles to get lower rmsd.
         ET.SubElement(score_function, "Reweight", scoretype="cart_bonded_length", weight=str(self.bond_weight))
         ET.SubElement(score_function, "Reweight", scoretype="cart_bonded_angle", weight=str(self.angle_weight))
         ET.SubElement(score_function, "Reweight", scoretype="cart_bonded_torsion", weight=str(self.torsion_weight))
         ET.SubElement(score_function, "Reweight", scoretype="rama_prepro", weight=str(self.ramachandran_cst_weight))
-        #ET.SubElement(score_function, "Reweight", scoretype="dna_bb_torsion", weight="0.6")
-        #ET.SubElement(score_function, "Reweight", scoretype="dna_sugar_close", weight="0856")
-        #ET.SubElement(score_function, "Reweight", scoretype="dna_chi", weight="0.5")
-        #ET.SubElement(score_function, "Reweight", scoretype="orbitals_hpol_bb", weight="0.2")
-        #ET.SubElement(score_function, "Reweight", scoretype="pci_cation_pi", weight="0.5")
-        #ET.SubElement(score_function, "Reweight", scoretype="pci_pi_pi", weight="0.065")
-        #ET.SubElement(score_function, "Reweight", scoretype="pci_salt_bridge", weight="0.32")
-        #ET.SubElement(score_function, "Reweight", scoretype="pci_hbond", weight="0.3")
-
-
 
         ###################
         #Residue Selection#
@@ -432,65 +351,7 @@ class FastRelaxDensity:
                                             wt_adp="0.0005",
                                             init="1",
                                             exact="1")
-        if self.allatom_min:
-            min_mover = ET.SubElement(movers,
-                                   "MinMover",
-                                   name="allatom_min",
-                                   scorefxn="dens",
-                                   type="lbfgs_armijo_nonmonotone",
-                                   max_iter="200",
-                                   tolerance="0.00001",
-                                   bondangle="1",
-                                   bondlength="1",
-                                   bb="1",
-                                   chi="1",
-                                   jump="ALL",
-                                   cartesian="1")
-        if self.bb_min or self.rebuild:
-            #SwitchResidueTypeSetMovername="tocen" set="centroid"/>
-            to_cen = ET.SubElement(movers,
-                                   "SwitchResidueTypeSetMover",
-                                   name="tocen",
-                                   set="centroid")
-            #<MinMovername="cenmin" scorefxn="cen" type="lbfgs_armijo_nonmonotone"max_iter="200" tolerance="0.00001" bb="1" chi="1" jump="ALL"/>
-            bb_min = ET.SubElement(movers,
-                                   "MinMover",
-                                   name="cenmin",
-                                   scorefxn="cen",
-                                   type="lbfgs_armijo_nonmonotone",
-                                   max_iter="200",
-                                   tolerance="0.00001",
-                                   bb="1",
-                                   chi="1",
-                                   jump="ALL")
-        if self.rebuild:
-            for key, value in self.rebuild_steps.items():
-                ET.SubElement(movers,
-                              "CartesianSampler",
-                              name="cen5_{}".format(key),
-                              automode_scorecut=str(value),
-                              scorefxn="cen",
-                              mcscorefxn="cen",
-                              fascorefxn="dens_soft",
-                              strategy=self.rebuild_strategy,
-                              fragbias="density",
-                              rms=self.rebuild_rms,
-                              ncycles="200",
-                              fullatom="0",
-                              bbmove="1",
-                              nminsteps="25",
-                              temp="4",
-                              fraglens="7",
-                              nfrags="25")
 
-            # ET.SubElement(movers,
-            #                "FastRelax",
-            #                name="relaxcart_rebuild",
-            #                bondangle="1",
-            #                bondlength="1",
-            #                scorefxn="dens",
-            #                repeats="1",
-            #                cartesian="1")
         if self.fastrelax:
             fast_relax = ET.SubElement(movers,
                                        "FastRelax",
@@ -508,18 +369,11 @@ class FastRelaxDensity:
                 fast_relax.set("cst_file", self.cst_file)
             if not self.selection_str is None:
                 fast_relax.set("movemap_factory", "fr_mm_factory")
-            #Constrain side chains if requested.
-            #if self.constrain_side_chains:
-            #    fast_relax.set("coord_constrain_sidechains", "1")
-            #Constrain to starting coordinates if requested.
-            #if self.constrain_to_start_coords:
-            #    fast_relax.set("constrain_relax_to_start_coords", "1")
             # If torsional refinement requested set cartesian to 0.
             if self.torsional:
                 fast_relax.set("cartesian", "0")
                 fast_relax.set("bondangle", "0")
                 fast_relax.set("bondlength", "0")
-
 
 
         protocols = ET.SubElement(rosetta, "PROTOCOLS")
@@ -535,39 +389,16 @@ class FastRelaxDensity:
                 report_fsc.set("testmap", self.test_map)
         if self.fastrelax:
             fast_relax = ET.SubElement(protocols, "Add", mover="relaxcart")
-        if self.bb_min:
-            ET.SubElement(protocols, "Add", mover="tocen")
-            ET.SubElement(protocols, "Add", mover="cenmin")
-        if self.allatom_min:
-            ET.SubElement(protocols, "Add", mover="allatom_min")
-        if self.rebuild:
-            ET.SubElement(protocols, "Add", mover="tocen")
-            ET.SubElement(protocols, "Add", mover="cenmin")
-            if self.rebuild_strategy == "auto":
-                for key in self.rebuild_steps.keys():
-                    ET.SubElement(protocols, "Add", mover="relaxcart_rebuild")
-                    ET.SubElement(protocols, "Add", mover="cen5_{}".format(key))
-            elif self.rebuild_strategy == "rama":
-                #ET.SubElement(protocols, "Add", mover="relaxcart_rebuild")
-                ET.SubElement(protocols, "Add", mover="cen5_{}".format(list(self.rebuild_steps.keys())[-1]))
-            #ET.SubElement(protocols, "Add", mover="relaxcart_rebuild")
-            #ET.SubElement(protocols, "Add", mover="relaxcart_rebuild")
         if self.b_factor and not self.map_file is None:
             bfactor = ET.SubElement(protocols, "Add", mover="fit_bs")
         if not self.map_file is None:
             ET.SubElement(protocols, "Add", mover="report_fsc")
-        if self.rebuild:
-            ET.SubElement(rosetta,
-                        "OUTPUT",
-                        scorefxn="dens")
-        #ET.dump(rosetta)
         tree = ET.ElementTree(rosetta)
         xmlstr = minidom.parseString(ET.tostring(rosetta)).toprettyxml(indent="   ")
         xml_file = self.get_xml_filename(wt)
         with open(xml_file, 'w') as xml:
             xml.write(xmlstr)
         logger.info(f"XML Input script for weight {wt} written to {xml_file}.")
-        #tree.writef("refine_relax_{}.xml".format(wt))
 
     def _remove_hetatms(self, model):
         logger.debug("Temporarily removing HETATMS for {}".format(model))
@@ -670,14 +501,12 @@ class FastRelaxDensity:
                "-parser:protocol {}/{}".format(os.getcwd(),
                                                self.get_xml_filename(wt)),
                "-beta",
-               #"-add_orbitals",
                "-ignore_unrecognized_res",
                "-score_symm_complex false",
                "-default_max_cycles 200",
                "-ignore_zero_occupancy false",
                "-dna true",
                "-out::suffix _refined_{}".format(mdl),
-#              "-in:auto_setup_metals true",
                "-overwrite"]
         if not self.map_file is None:
             cmd_rosetta.extend(["-edensity::cryoem_scatterers",
@@ -691,21 +520,12 @@ class FastRelaxDensity:
             cmd_rosetta.append("-chemical:exclude_patches SidechainConjugation -extra_res_fa")
             for params in self.params_files:
                 cmd_rosetta.append(params)
-        #if self.constrain_to_start_coords:
-        #    cmd_rosetta.append("-relax:constrain_relax_to_start_coords")
         if self.norepack:
             cmd_rosetta.append("-prevent_repacking true")
-        # if not self.native_coords is None:
-        #     cmd_rosetta.extend(["-in:file:native {}".format(self.native_coords),
-        #                         "-relax:constrain_relax_to_native_coords",
-        #                         "-relax:coord_constrain_sidechains",
-        #                         #"-relax:coord_cst_stdev 0.25"
-        #                         ])
         cmd_rosetta_file = " \\\n".join(cmd_rosetta)
 
         with open(f"job_w{wt}_{mdl}.sh", 'w') as f:
             f.write(cmd_rosetta_file)
-        #logger.debug(cmd_rosetta)
         cmd_logger = '\n'.join(cmd_rosetta)
         cmd_rosetta = ' '.join(cmd_rosetta)
         logger.info(f"Starting task \"Density weight {wt}, Model {mdl}\".")
@@ -713,8 +533,6 @@ class FastRelaxDensity:
         try:
             with open('job_w{}_m{}.log'.format(wt, mdl), 'w') as f:
                 p = Popen(cmd_rosetta, shell=True, stdout=f, stderr=f, preexec_fn=os.setsid)
-                #while not p.poll() is None:
-                 #   sleep(1)
                 p.communicate()
                 logger.info(f"Task finished: \"Density weight {wt}, Model {mdl}\".")
         except KeyboardInterrupt:
@@ -780,30 +598,20 @@ class FastRelaxDensity:
             if best_model is None:
                 logger.error("Collecting best model: No job directory found.")
                 raise SystemExit
-                #raise Exception
         else:
             logger.error("Collecting weight: No job directory found.")
             raise SystemExit
-            #raise Exception
-
 
 
     def pipeline(self):
         '''
         Parallelize jobs to test different weights or generate multiple models.
         '''
-        # if len(self.weights) > 1:
-        #     weights = self.weights
-        #     models = 1
-        # else:
-        #     weights = [self.weight]
-        #     models = self.num_models
         if not self.reference_model is None:
             self._generate_reference_model_restraints()
         if self.reference_model is None and self.self_restraints:
             self.reference_model = self.pdb_file
             self._generate_reference_model_restraints()
-        #relax_queue = Queue()
         relax_list = []
         logger.info("Preparing input for Rosetta.")
         for wt in self.weights:
@@ -826,9 +634,6 @@ class FastRelaxDensity:
 
         with closing(Pool(self.nproc)) as pool:
             pool.starmap(self._run_relax, relax_list)
-        # utils.multiprocessing_routine(relax_list,
-        #                               self.nproc,
-        #                               self._run_relax)
         try:
             self._select_best_model()
         except KeyboardInterrupt:
@@ -840,21 +645,11 @@ class FastRelaxDensity:
 
         if self.run_validation:
             logger.info("Running validation with phenix.molprobity.")
-            #validation_queue = Queue()
-            #results_q = self.queue_manager.Queue()
             validation_list = []
             for file in os.listdir(self.base_dir):
                 if file.startswith("best_model"):
-                    # validation_queue.put((results_q,
-                    #                       os.path.abspath(file),
-                    #                       self.map_file,
-                    #                       self.resolution,
-                    #                       self.path.get_exec('phenix.validation_cryoem')))
-                    # print("val size")
-                    # print(validation_queue.qsize())
                     validation_list.append((os.path.abspath(file),
                                           self.path.get_exec('phenix.molprobity')))
-            #if validation_queue.qsize() > 0:
             if len(validation_list) > 0:
                 try:
                     if not os.path.exists("validation"):
@@ -862,13 +657,7 @@ class FastRelaxDensity:
                     os.chdir('validation')
                     with closing(Pool(self.nproc)) as pool:
                         result = pool.starmap_async(validation.run_validation, validation_list)
-                    # utils.multiprocessing_routine(validation_queue,
-                    #                               self.nproc,
-                    #                               self.validation.run_validation)
                     result = result.get()
-                    # while results_q.qsize() > 0:
-                    #     results.append(results_q.get())
-                    # print(results)
                     logger.debug("Validation result:")
                     logger.debug(result)
                     if not result == [] and not result is None:
@@ -915,7 +704,6 @@ def get_cli_args():
                         help="Comma separated list of params files (no spaces between commas).")
     parser.add_argument('--weight', '-w',
                         help='Density weight. To test multiple weights separate numbers with \',\' (w/o space). Default=35', default='35')
-    #parser.add_argument('--test_weights', help='Test different weights.', action='store_true')
     parser.add_argument('--bfactor',
                         help='Run B-factor refinement after protocol',
                         action='store_true')
@@ -926,30 +714,16 @@ def get_cli_args():
                         help="Disable repacking of sidechains.",
                         default=False,
                         action='store_true')
-    # parser.add_argument('--protocol',
-    #                     help='Choose strategy [1-4] (1 = FastRelax only,'
-    #                          ' 2 = Backbone Minimization,'
-    #                          ' 3 = Allatom Minimization,'
-    #                          ' 4 = Automatic rebuilding + FastRelax,'
-    #                          ' 5 = Rama based rebuilding + FastRelax,'
-    #                          ' 6 = B-factor only). Default=1',
-    #                     default=1,
-    #                     choices=[x for x in range(6)],
-    #                     type=int)
     parser.add_argument('--space',
                         help='Choose refinement space "cartesian" or "torsional". Default = cartesian'
                              ' Cartesian = XYZ coordinates;'
                              ' Torsional = Refinement of dihedral angles (good to capture domain movements but can result in unfolding of structure)',
                         choices=['cartesian', 'torsional'],
                         default = 'cartesian')
-    #parser.add_argument('--constrain_side_chains', help='Constrain side chain rotamers.', action='store_true')
-    #parser.add_argument('--constrain_to_start_coords', help='Constrain to starting coordinates.',
-    #                    action='store_true')
     parser.add_argument('--num_models',
                         help='Number of models to generate. default=10',
                         default=10,
                         type=int)
-    #parser.add_argument('--torsional', help='Do refinement in torsional space.', action='store_true')
     parser.add_argument('--ramachandran',
                         help='Restrain phi/psi angles.',
                         action='store_true')
@@ -992,14 +766,6 @@ def get_cli_args():
                         type=int)
     parser.add_argument('--selection',
                         help='Selection of residues and/or chains.')
-    # parser.add_argument('--ranking_method',
-    #                     help='Ranking method.',
-    #                     default='fsc')
-    # parser.add_argument('--bb_h',
-    #                     help='More weight on backbone H-bonds to stabilize secondary structure.',
-    #                     action='store_true')
-    # parser.add_argument('--native_coords',
-    #                     help='More weight on backbone H-bonds to stabilize secondary structure.')
     parser.add_argument('--reference_model',
                         help='Generates backbone and'
                              ' sidechain dihedral constraints'
@@ -1016,7 +782,6 @@ def get_cli_args():
                         help="Enable debug mode.",
                         action='store_true')
     args, unknown = parser.parse_known_args()
-
 
 
     #Read in files.
@@ -1043,7 +808,6 @@ def get_cli_args():
 
     if map_file is None:
         logger.info("No map file supplied. This will run FastRelax without density scoring.")
-    #    raise SystemExit
     if not map_file is None and args.resolution is None:
         logger.error("Resolution required.")
         raise SystemExit
@@ -1057,9 +821,6 @@ def get_cli_args():
     return args, unknown, map_file, pdb_file, cst_file, symm_file
 
 def fastrelax_main(args, unknown, map_file, pdb_file, cst_file, symm_file):
-
-
-    #signal.signal(signal.SIGINT, signal.default_int_handler)
     try:
         FastRelaxDensity(map_file,
                          pdb_file,
