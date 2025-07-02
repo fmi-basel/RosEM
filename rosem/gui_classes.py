@@ -585,10 +585,30 @@ class Validation(GUIVariables):
             #self.reports.ctrl.setSelectionBehavior(QtWidgets.QTableView.SelectRows)
             #self.reports.ctrl.setSelectionMode(QtWidgets.QTableView.SingleSelection)
             self.reports.ctrl.setHorizontalHeaderLabels(tuple(['Best model' for x in range(len(reports))]))
-            row_labels = tuple(self.reports.report_dict.keys())
+            
+            label_mapping = {'weight': 'Rosetta density weight',
+                            'bonds': 'Bond length rmsd',
+                            'angles': 'Bond angles rmsd',
+                            'planarity': 'Planarity rmsd',
+                            'dihedral': 'Dihedral angles rmsd',
+                            'min_distance': 'Shortest distance found (A)',
+                            'clashscore': 'Clashscore',
+                            'ramas': 'Ramachandran outliers (%)',
+                            'rotamers': 'Rotamer outliers (%)',
+                            'cbeta': 'Cbeta deviations (%)',
+                            'cis_proline': 'Cis Prolines (%)',
+                            'cis_general': 'Cis Peptides (%)',
+                            'twisted_proline': 'Twisted Prolines (%)',
+                            'twisted_general': 'Twisted Peptides (%)',
+                            'fsc_resolution': 'FSC resolution range',
+                            'fsc_mask': 'FSC mask',
+                            'fsc_test': 'FSC test map',
+                            'fsc': 'FSC main map'}
+            
+            row_labels = tuple([label_mapping[k] for k in self.reports.report_dict.keys()])
             self.reports.ctrl.setVerticalHeaderLabels(row_labels)
 
-            logger.debug("Row Labels")
+            logger.debug("New Row Labels")
             logger.debug(row_labels)
 
             #self.reports.ctrl.setColumnWidth(0, 400)

@@ -51,10 +51,10 @@ def get_fsc_test(model):
 
 @dataclass
 class Stats:
-    bond_rmsd: Optional[float] = None
-    angle_rmsd: Optional[float] = None
-    planarity_rmsd: Optional[float] = None
-    dihedral_rmsd: Optional[float] = None
+    bonds: Optional[float] = None
+    angles: Optional[float] = None
+    planarity: Optional[float] = None
+    dihedral: Optional[float] = None
     min_distance: Optional[float] = None
     clashscore: Optional[float] = None
     ramas: Optional[float] = None
@@ -79,13 +79,13 @@ def _get_validation_results(file):
         if stats_section:
             #print(line)
             if re.search("\s+Bond\s+", line):
-                stats.bond_rmsd = line.split()[2]
+                stats.bonds = line.split()[2]
             elif re.search("Angle", line):
-                stats.angle_rmsd = line.split()[2]
+                stats.angles = line.split()[2]
             elif re.search("Planarity", line):
-                stats.planarity_rmsd = line.split()[2]
+                stats.planarity = line.split()[2]
             elif re.search("Dihedral", line):
-                stats.dihedral_rmsd = line.split()[2]
+                stats.dihedral = line.split()[2]
             elif re.search(r"Min\s[Nn]onbonded\s[Dd]istance", line):
                 stats.min_distance = line.split()[4]
             elif re.search(r"All-atom\s[Cc]lashscore", line):
