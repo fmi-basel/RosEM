@@ -13,7 +13,7 @@
 #limitations under the License.
 from __future__ import absolute_import
 from rosem import gui_threads
-from rosem.gui_dialogs import message_dlg
+from rosem.gui_dialogs import message_dlg, error_dialog
 from rosem.gui_dlg_settings import SettingsDlg
 from rosem.gui_dlg_project import ProjectDlg
 from rosem.gui_dlg_modtype import ModTypeDlg
@@ -60,6 +60,7 @@ def handle_exception(exc_type, exc_value, exc_traceback):
         return
 
     logger.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+    error_dialog(''.join(traceback.format_exception(exc_type, exc_value, exc_traceback)))
 
 
 def main():

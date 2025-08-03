@@ -26,3 +26,16 @@ def message_dlg(title, text):
     dlg.exec()
 
     return dlg
+
+
+def error_dialog(error_message):
+    dlg = QtWidgets.QMessageBox()
+    dlg.setIcon(QtWidgets.QMessageBox.Critical)
+    dlg.resize(800, 400)
+    dlg.setWindowTitle("Error")
+    dlg.setText("A error occurred.")
+    dlg.setText("Click 'Show Details' for more information.")
+    dlg.setDetailedText(error_message)
+    dlg.setStandardButtons(QtWidgets.QMessageBox.Ok)
+    dlg.exec_()
+
