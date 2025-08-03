@@ -6,3 +6,7 @@ rosem.egg-info
 .DS_Store
 rosem/remove_subcls.sh
 env
+rosem/torsion_restraints_gemmi.py
+*.pyc
+setup_deprec
+rosem/vis_chimerax.py
