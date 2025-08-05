@@ -1,2 +1,3 @@
 include rosem/gui.ui
 include rosem/icons/*.png
+include rosem/templates/*.j2

@@ -1,0 +1,33 @@
+#!/bin/bash
+#SBATCH --account={{account}}
+#SBATCH --job-name=rosem
+#SBATCH --cpus-per-task={{cpu}}
+#SBATCH --ntasks=1
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --output={{logfile}}
+#SBATCH --error={{logfile}}
+#Append to logfile
+#SBATCH --open-mode=append
+#SBATCH --mem-per-cpu={{mem}}G
+
+
+START=$(date +%s)
+STARTDATE=$(date -Iseconds)
+echo "[INFO] [$STARTDATE] [$$] Starting SLURM job $SLURM_JOB_ID"
+echo "[INFO] [$STARTDATE] [$$] QUEUE_JOB_ID=$SLURM_JOB_ID"
+echo "[INFO] [$STARTDATE] [$$] Running on $(hostname -s)"
+echo "[INFO] [$STARTDATE] [$$] Working directory: $(pwd)"
+
+### Add environment activation here ###
+
+{{command}}
+
+EXITCODE=$?
+END=$(date +%s)
+ENDDATE=$(date -Iseconds)
+echo "[INFO] [$ENDDATE] [$$] Workflow finished with code $EXITCODE"
+echo "[INFO] [$ENDDATE] [$$] Workflow execution time \(seconds\) : $(( $END-$START ))"
+echo -n "[INFO] [$ENDDATE] [$$] Max memory usage in bytes: "
+cat /sys/fs/cgroup/memory/slurm/uid_$(id -u)/job_${SLURM_JOB_ID}/memory.max_usage_in_bytes
+echo

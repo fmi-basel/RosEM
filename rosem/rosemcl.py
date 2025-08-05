@@ -532,7 +532,7 @@ class FastRelaxDensity:
         logger.info(f"Command line:\n{cmd_logger}")
         try:
             with open('job_w{}_m{}.log'.format(wt, mdl), 'w') as f:
-                p = Popen(cmd_rosetta, shell=True, stdout=f, stderr=f, preexec_fn=os.setsid)
+                p = Popen(cmd_rosetta, shell=True, stdout=f, stderr=f)#, preexec_fn=os.setsid)
                 p.communicate()
                 logger.info(f"Task finished: \"Density weight {wt}, Model {mdl}\".")
         except KeyboardInterrupt:
@@ -542,6 +542,7 @@ class FastRelaxDensity:
         except Exception as e:
             logger.error(f"Could not start task \"Density weight {wt}, Model {mdl}\".", exc_info=True)
             traceback.print_exc()
+            raise SystemExit
 
         os.chdir(self.base_dir)
 
@@ -551,6 +552,7 @@ class FastRelaxDensity:
         FSC[mask = 4.45657](10:3) = 0.590966 / 0.591017"""
         wts = []
         best_model = None
+        energy_vals = []
         for dir in os.listdir(self.base_dir):
             if re.match('job_w\d+', dir):
                 m = re.match('job_w(\d+)', dir)
@@ -590,7 +592,7 @@ class FastRelaxDensity:
                         try:
                             copyfile(os.path.join(dir, best_model), "best_model_w{}.pdb".format(wt))
                             traceback.print_exc()
-                        except (KeyboardInterrupt, Exception) as e:
+                        except (KeyboardInterrupt) as e:
                             logger.error("Could not copy best model.")
                             logger.debug(e, exc_info=True)
                             traceback.print_exc()
@@ -814,9 +816,6 @@ def get_cli_args():
     if pdb_file is None:
         logger.error("No pdb file supplied.")
         raise SystemExit
-
-
-
 
     return args, unknown, map_file, pdb_file, cst_file, symm_file
 

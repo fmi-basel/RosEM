@@ -14,6 +14,7 @@
 from __future__ import absolute_import
 from rosem import gui_threads
 from rosem.gui_dialogs import message_dlg, error_dialog
+from rosem.gui_dlg_queue_submit import QueueSubmitDlg
 from rosem.gui_dlg_settings import SettingsDlg
 from rosem.gui_dlg_project import ProjectDlg
 from rosem.gui_dlg_modtype import ModTypeDlg
@@ -34,6 +35,8 @@ from sqlalchemy import create_engine
 import traceback
 from rosem.gui_classes import Job, Settings, FastRelaxParams, Project, Validation, DefaultValues
 import argparse
+
+
 
 
 parser = argparse.ArgumentParser(description="Pipeline for running rosetta fast_relax protocol with density"
@@ -66,7 +69,8 @@ def handle_exception(exc_type, exc_value, exc_traceback):
 def main():
     shared_objects = [Project(),  FastRelaxParams(), Job(), Validation(), Settings()]
     db = DBHelper(shared_objects)
-    upgrade_db()
+    db.upgrade_db()
+    db.init_db()
     with db.session_scope() as sess:
         db.set_session(sess)
     for obj in shared_objects:
@@ -76,22 +80,6 @@ def main():
     app = QtWidgets.QApplication(sys.argv)
     mainframe = MainFrame(shared_objects, DefaultValues(), db, sess, install_path)
     app.exec_()
-
-def upgrade_db():
-    logger.debug("Upgrading DB")
-    db_path = os.path.join(os.path.expanduser("~"), '.rosem.db')
-    engine = create_engine('sqlite:///{}'.format(db_path), connect_args={'check_same_thread': False})
-    stmts = ['ALTER TABLE fastrelaxparams DROP COLUMN sc_weights',
-            'ALTER TABLE fastrelaxparams ADD sc_weights VARCHAR DEFAULT \'R:0.76,K:0.76,E:0.76,'
-             'D:0.76,M:0.76,C:0.81,Q:0.81,H:0.81,N:0.81,T:0.81,S:0.81,Y:0.88,'
-             'W:0.88,A:0.88,F:0.88,P:0.88,I:0.88,L:0.88,V:0.88\'']
-    with engine.connect() as conn:
-        for stmt in stmts:
-            try:
-                rs = conn.execute(stmt)
-            except Exception as e:
-                logger.debug(e)
-                #traceback.print_exc()
 
 class NoProjectSelected(Exception):
     pass
@@ -114,6 +102,12 @@ class SelfRestraintsReferenceModelCombinationNotAllowed(Exception):
 class ExecutablesNotFound(Exception):
     pass
 
+class JobSubmissionCancelledByUser(Exception):
+    pass
+
+class JobSubmissionError(Exception):
+    pass
+
 class MainFrame(QtWidgets.QMainWindow):
     def __init__(self, shared_objects, default_values, db, sess, install_path):
         super(MainFrame, self).__init__() # Call the inherited classes __init__ method
@@ -129,6 +123,8 @@ class MainFrame(QtWidgets.QMainWindow):
         self.files_selected_item = None
         self.gui_params['project_id'] = None
         self.gui_params['job_id'] = None
+        self.gui_params['queue_job_id'] = None
+        self.gui_params['queue'] = False
         self.gui_params['job_project_id'] = None
         self.gui_params['job_name'] = "FastRelaxDens"
         self.gui_params['other_settings_changed'] = False
@@ -148,6 +144,7 @@ class MainFrame(QtWidgets.QMainWindow):
        # self.check_executables()
         self.currentDirectory = os.getcwd()
         self.threads = []
+        self.thread_workers = []
 
         self.reconnect_jobs()
         self.show() # Show the GUI
@@ -181,7 +178,7 @@ class MainFrame(QtWidgets.QMainWindow):
 
         self.btn_prj_update = self.findChild(QtWidgets.QToolButton, 'btn_prj_update')
         self.btn_prj_update.setIcon(QIcon(pkg_resources.resource_filename('rosem.icons', 'gtk-edit.png')))
-
+        self.notebook.setCurrentIndex(0)
         for obj in self.shared_objects:
             obj.set_controls(self, obj.db_table)
 
@@ -245,7 +242,7 @@ class MainFrame(QtWidgets.QMainWindow):
         logger.debug("=== Initializing GUI ===")
         for obj in self.shared_objects:
             logger.debug(f"Initializing  {obj}")
-            self.gui_params = obj.init_gui(self.gui_params, self.sess)
+            self.gui_params = obj.init_gui(self.gui_params, sess=self.sess)
             logger.debug(self.gui_params)
         self.fastrelaxparams.update_from_default(self.default_values)
 
@@ -259,6 +256,7 @@ class MainFrame(QtWidgets.QMainWindow):
                 message_dlg('Error', message)
 
     def create_monitor_thread(self, job_params):
+        logger.debug(f"Creating monitor thread for {job_params['job_project_id']} {job_params['job_id']}")
         self.monitor_thread = QThread()
         self.monitor_worker = gui_threads.MonitorJob(self, job_params)
         self.monitor_worker.moveToThread(self.monitor_thread)
@@ -271,6 +269,7 @@ class MainFrame(QtWidgets.QMainWindow):
         self.monitor_worker.job_status.connect(self.OnJobStatus)
         self.monitor_thread.start()
         self.threads.append(self.monitor_thread)
+        self.thread_workers.append(self.monitor_worker)
 
     def check_project_exists(self):
         if self.prj.is_empty(self.sess):
@@ -335,42 +334,63 @@ class MainFrame(QtWidgets.QMainWindow):
 
     def OnJobStatus(self, job_params):
         logger.debug("OnJobStatus")
-        self.job_params = job_params
-        if job_params['status'] == "aborted":
-            self.job.update_status("aborted", job_params['job_id'], self.sess)
-        elif job_params['status'] == "running":
-            self.job.update_status("running", job_params['job_id'], self.sess)
-            self.job.update_pid(job_params['pid'], job_params['job_id'], self.sess)
-        elif job_params['status'] == "finished":
-            self.job.update_status("finished", job_params['job_id'], self.sess)
+        log_file = self.job.get_log_file(job_params['project_path'], job_params['job_project_id'], job_params['job_name'])
 
-            validation = self.job.insert_validation(self.validation, job_params, self.sess)
-            if validation:
-                if not self.gui_params['job_id'] is None:
-                    if int(self.gui_params['job_id']) == int(job_params['job_id']):
-                        self.notebook.setTabEnabled(2, True)
-                        self.validation.init_gui(self.gui_params, self.sess)
-            else:
-                self.notebook.setTabEnabled(2, False)
-                logger.debug("No validation report found!")
-        elif job_params['status'] == "error":
-            self.job.update_status("error", job_params['job_id'], self.sess)
-        self.gui_params = self.job.init_gui(self.gui_params, self.sess)
-        self.job.update_log(job_params)
+        if 'status' in job_params:
+            logger.debug(f"Status found: {job_params['status']}")
+            if job_params['status'] == "aborted":
+                self.job.update_status("aborted", job_params['job_id'], self.sess)
+            elif job_params['status'] == "waiting":
+                self.job.update_status("waiting", job_params['job_id'], self.sess)
+            elif job_params['status'] == "running":
+                self.job.update_status("running", job_params['job_id'], self.sess)
+            elif job_params['status'] == "starting":
+                self.job.update_status("starting", job_params['job_id'], self.sess)
+                #self.job.update_pid(job_params['pid'], job_params['job_id'], self.sess)
+            
+            #Submit second job if split_step option is selected
+            if 'queue' in job_params:
+                if all([job_params['queue'], 
+                         job_params['status'] in ["waiting", "running"]]):
+                        if job_params['pid'] is None:
+                            message_dlg("Error", "Could not get JobID from queue submission command.")
+            if job_params['status'] == "finished":
+                logger.debug(f"Status of {job_params['job_id']} is finished.")
+                self.job.update_status("finished", job_params['job_id'], self.sess)
+                #job_params['project_id'] = self.job.get_project_id_by_job_id(job_params['job_id'], self.sess)
+                #job_params['project_path'] = self.prj.get_path_by_project_id(job_params['project_id'], self.sess)
+                validation = self.job.insert_validation(self.validation, job_params, self.sess)
+                if validation:
+                    if not self.gui_params['job_id'] is None:
+                        if int(self.gui_params['job_id']) == int(job_params['job_id']):
+                            self.notebook.setTabEnabled(2, True)
+                            self.validation.init_gui(self.gui_params, self.sess)
+                else:
+                    self.notebook.setTabEnabled(2, False)
+                    logger.debug("No validation report found!")
+            if job_params['status'] == "error":
+                logger.debug(f"Status of job_id {job_params['job_id']} is error")
+                self.job.update_status("error", job_params['job_id'], self.sess)
+            if job_params['status'] == "unknown":
+                self.job.update_status("unknown", job_params['job_id'], self.sess)
+                logger.debug(f"Status of job_id {job_params['job_id']} is unknown")
+                
+        else:
+            job_params['status'] = 'unknown'
+            logger.debug("Status not found in job_params")
+        updated_status = self.job.get_status(job_params['job_id'], self.sess)
+        logger.debug(f"Updated status for {job_params['job_id']} from the DB is {updated_status}")
+        self.gui_params = self.job.init_gui(self.gui_params, other=self, sess=self.sess)
+        #Only update log if the job id from the thread matches the currently selected job and the Log Tab is selected.
+        
+        self.job.update_log(log_file=log_file, job_id_active=int(self.gui_params['job_id']), job_id_thread=int(job_params['job_id']), append=False)
 
     def OnUpdateLog(self, log):
         lines, job_id = log
         page = self.notebook.currentWidget().objectName()
         logger.debug("Notebook page {} id {} {}".format(page, self.gui_params['job_id'], job_id))
-        if not self.gui_params['job_id'] is None:
-            if int(self.gui_params['job_id']) == int(job_id) and page == "LogTab":
-                for line in lines:
-                    logger.debug(line)
-                    self.job.log.ctrl.appendPlainText(line)
-            else:
-                logger.debug("job id or page not matching")
-        else:
-            logger.debug("no job selected")
+        self.job.update_log(log_lines=lines, job_id_active=int(self.gui_params['job_id']), job_id_thread=job_id, append=True)
+
 
     def OnAbout(self):
         dlg = AboutDlg(self)
@@ -394,17 +414,6 @@ class MainFrame(QtWidgets.QMainWindow):
             if self.fastrelaxparams.files.modify_type_from_gui(file_type=file_type) is False:
                 message_dlg('Error', 'The selected file type can only be assigned once!')
 
-        # else:
-        #     dlg = wx.SingleChoiceDialog(None,
-        #                                 "Choose...",
-        #                                 "Type",
-        #                                 ["Model", "Map", "Test Map", "Params", "Constraints", "Reference Model", "Symmetry Definition"],
-        #                                 wx.CHOICEDLG_STYLE)
-        #     if dlg.ShowModal() == wx.ID_OK:
-        #         file_type = dlg.GetStringSelection()
-        #         self.fastrelaxparams.files.modify_type_from_gui(file_type=file_type)
-        #     dlg.Destroy()
-
     def OnBtnRemoveFile(self):
         logger.debug("On btn remove")
         row = self.fastrelaxparams.files.ctrl.currentRow()
@@ -415,12 +424,35 @@ class MainFrame(QtWidgets.QMainWindow):
             self.fastrelaxparams.files.ctrl.removeRow(row)
             self.fastrelaxparams.files.selected_item = None
 
+    def start_thread(self, job_params, cmd):
+        #Start  process thread
+        logger.debug("Start thread")
+        self.process_thread = QThread()
+        self.process_worker = gui_threads.RunProcessThread(self, job_params, cmd)
+        self.process_worker.moveToThread(self.process_thread)
+        self.process_thread.started.connect(self.process_worker.run)
+        self.process_worker.finished.connect(self.process_thread.quit)
+        self.process_worker.finished.connect(self.process_worker.deleteLater)
+        self.process_thread.finished.connect(self.process_thread.deleteLater)
+        self.process_worker.job_status.connect(self.OnJobStatus)
+        self.process_worker.change_tab.connect(self.OnChangeTab)
+        self.process_worker.error.connect(self.OnError)
+        self.process_thread.start()
+        self.threads.append(self.process_thread)
+        self.thread_workers.append(self.process_worker)
+        self.create_monitor_thread(self.job_params)
 
+    def OnError(self, msgs):
+        if len(msgs) > 0:
+            for msg in msgs:
+                message_dlg('Error', msg)
 
     def OnBtnRun(self):
         try:
+
             # Prepare Job
             self.fastrelaxparams.update_from_gui()
+            print(self.fastrelaxparams.__dict__)
             exec_messages = self.settings.check_executables(self.sess)
             logger.debug("EXEC messages")
             logger.debug(exec_messages)
@@ -448,12 +480,16 @@ class MainFrame(QtWidgets.QMainWindow):
                 params_obj_list = self.fastrelaxparams.generate_db_object(params_dict_db)
                 project_obj = self.prj.get_project_by_id(self.gui_params['project_id'], self.sess)
                 self.job.set_timestamp()
+                job_params['time_started'] = self.job.timestamp.value
                 self.job.set_next_job_project_id(self.gui_params['project_id'], self.sess)
                 self.job.set_host()
                 self.job.set_status("starting")
+                job_params['host'] = self.job.host.value
+                job_params['job_name'] = self.gui_params['job_name']
                 job_params['job_project_id'] = self.job.job_project_id.value
                 job_params['job_dir'] = self.job.get_job_dir(job_params['job_project_id'],
                                                                 self.gui_params['job_name'])
+                job_params['project_path'] = self.gui_params['project_path']
                 job_params['job_path'] = self.job.get_job_path(self.gui_params['project_path'],
                                                             job_params['job_dir'])
                 job_params['log_file'] = self.job.get_log_file(self.gui_params['project_path'],
@@ -487,51 +523,103 @@ class MainFrame(QtWidgets.QMainWindow):
                 #job_params['job_path'] = job_path
                 job_params['phenix_path'] = settings.phenix_path
                 job_params['rosetta_path'] = settings.rosetta_path
+                job_params['queue_template'] = settings.queue_template
+                job_params['queue_submit'] = settings.queue_submit
+                job_params['queue_account'] = settings.queue_account
+                job_params['queue_jobid_regex'] = settings.queue_jobid_regex
+                if not settings.queue_template in ["None", None]:
+                    job_params['submission_script_template_path'] = settings.queue_template
+                else:
+                    job_params['submission_script_template_path'] = None
                 self.gui_params['job_id'] = job_id
+                self.job_params = job_params
+
+
 
                 #Start thread
                 if not os.path.exists(job_params['job_path']):
                     try:
                         os.mkdir(job_params['job_path'])
-                    except:
+                    except OSError:
                         message_dlg('Error', f"Could not create job directory in {job_params['job_path']}!")
                         logger.debug("Could not create job directory!")
                         raise DirectoryNotCreated
 
-
-                    #thread.daemon = True
-
                     logger.debug("Job IDs before notebook: {}".format(self.gui_params['job_id']))
-                    self.job_params = job_params
-                    self.process_thread = QThread()
-                    self.process_worker = gui_threads.RunProcessThread(self, self.job_params)
-                    self.process_worker.moveToThread(self.process_thread)
-                    self.process_thread.started.connect(self.process_worker.run)
-                    self.process_worker.finished.connect(self.process_thread.quit)
-                    self.process_worker.finished.connect(self.process_worker.deleteLater)
-                    self.process_thread.finished.connect(self.process_thread.deleteLater)
-                    self.process_worker.job_status.connect(self.OnJobStatus)
-                    self.process_worker.change_tab.connect(self.OnChangeTab)
-                    self.process_thread.start()
-                    self.threads.append(self.process_thread)
+                    queue_errors = []
+                    cmd_dict_jobparams = self.fastrelaxparams.get_dict_cmd()
+                    cmd_dict_settings = self.settings.get_dict_cmd()
+                    cmd_dict_job = self.job.get_dict_cmd()
 
-                    self.create_monitor_thread(self.job_params)
+                    cmd_dict = {**cmd_dict_jobparams, **cmd_dict_settings, **cmd_dict_job}
+                    logger.debug("cmd dict")
+                    logger.debug(cmd_dict)
+                    
+                    cmd, submission_script_path = self.job.prepare_cmd(cmd_dict, job_params, queue_errors)
+                    logger.debug(f"Command {cmd}")
+
+
+                    if job_params['queue']:
+                        if not settings.queue_submit:
+                            queue_errors.append("No queue submission command defined")
+                        if not settings.queue_cancel:
+                            queue_errors.append("No queue cancel command defined")
+                        if not settings.queue_jobid_regex:
+                            queue_errors.append("No RegEx for queue job id extraction defined")
+                        if len(queue_errors) > 0:
+                            queue_errors = '\n'.join(queue_errors)
+                            message_dlg('Error', f'The following queue related settings are missing:\n{queue_errors}')
+                            raise JobSubmissionError
+                        job_params['submission_script_path'] = submission_script_path
+                        dlg = QueueSubmitDlg(self)
+                        result = dlg.exec()
+                        if not result:
+                            raise JobSubmissionCancelledByUser
+
+                    self.start_thread(job_params, cmd)
 
                 else:
                     message_dlg('Error', 'Directory with the same name already exists in the project folder!')
                     logger.debug("Job directory already exists.")
-        except DirectoryNotCreated:
-            pass
         except Exception:
-            pass
+            logging.debug("Exception in start job")
+            job_params['status'] = 'error'
+            self.OnJobStatus(job_params)
+            traceback.print_exc()
+
 
     def OnChangeTab(self):
         self.notebook.setCurrentIndex(1)
-        self.gui_params = self.job.init_gui(self.gui_params, self.sess)
+        self.gui_params = self.job.init_gui(self.gui_params, sess=self.sess)
 
     def OnBtnCancel(self):
         if self.gui_params['job_id'] is None:
             message_dlg('Error', 'No Job selected!', 'Error')
+        elif self.gui_params['queue']:
+            logger.debug("Cancel queue job")
+            settings = self.settings.get_from_db(self.sess)
+            queue_cancel = settings.queue_cancel
+            host = self.job.get_host(self.gui_params['job_id'], self.sess)
+            current_host = socket.gethostname()
+            if host == current_host:
+                if not queue_cancel == "" or not queue_cancel is None:
+                    pid = self.job.get_pid(self.gui_params['job_id'], self.sess)
+                    cmd = [queue_cancel, pid]
+                    logger.debug(f"Queue pid {pid}")
+                    #try:
+                    Popen(cmd)
+                    self.job.update_status("aborted", self.gui_params['job_id'], self.sess)
+                    self.job.init_gui(self.gui_params, other=self, sess=self.sess)
+                    self.job.update_log(log_file=self.gui_params['log_file'], job_id_active=int(self.gui_params['job_id']), append=False)
+                    # except Exception as e:
+                    #     logger.error(e, exc_info=True)
+                    #     cmd = ' '.join(cmd)
+                    #     message_dlg('Error', f'Cannot cancel job. The command was {cmd}!')
+                else:
+                    message_dlg('Error', 'No cancel command for queue submission method defined!')
+            else:
+                message_dlg('Error', f'Cannot cancel this job because it was started on a different host ({host})'
+                              f' and current host is {current_host}!')
         else:
             pid = self.job.get_pid(self.gui_params['job_id'], self.sess)
             host = self.job.get_host(self.gui_params['job_id'], self.sess)
@@ -540,17 +628,20 @@ class MainFrame(QtWidgets.QMainWindow):
                 try:
                     logger.debug("PID is {}".format(pid))
                     os.killpg(int(pid), signal.SIGINT)
-                    #self.job.init_gui(self.gui_params)
-                except TypeError:
-                    message_dlg('Error', 'No process ID found for this job!')
-                except Exception as e:
-                    logger.debug(e)
-                    traceback.print_exc()
-                    message_dlg('Error', 'Cannot cancel this job!', 'Error')
+                    #os.killpg(int(pid), signal.SIGTERM)
+                    self.job.update_status("aborted", self.gui_params['job_id'], self.sess)
+                    self.job.init_gui(self.gui_params, other=self, sess=self.sess)
+                    self.job.update_log(log_file=self.gui_params['log_file'], job_id_active=int(self.gui_params['job_id']), append=False)
+                except (ProcessLookupError):
+                    message_dlg('Error', 'No running process found for this job!')
+                # except Exception as e:
+                #     logger.debug(e)
+                #     traceback.print_exc()
+                #     message_dlg('Error', 'Cannot cancel this job!')
             else:
                 message_dlg('Error', f'Cannot cancel this job because it was started on a different host ({host})'
                               f' and current host is {current_host}!')
-
+                
     def OnCmbProjects(self):
         logger.debug("OnCmbProjects")
         project_name = str(self.prj.list.ctrl.currentText())
@@ -561,24 +652,15 @@ class MainFrame(QtWidgets.QMainWindow):
             self.gui_params['project_id'] = new_project_id
             self.gui_params['project_path'] = self.prj.get_path_by_project_id(new_project_id, self.sess)
             self.gui_params['other_settings_changed'] = False
-            self.gui_params = self.job.init_gui(self.gui_params, self.sess)
-
-    # def OnCmbProtocol(self, event):
-    #     self.protocol = self.fastrelaxparams.protocol.ctrl.GetCurrentSelection()
-
-    # def OnCmbConstraints(self, event):
-    #     self.constraints = self.fastrelaxparams.constraints.ctrl.GetCurrentSelection()
-
-    # def OnCmbSpace(self):
-    #     self.space = self.fastrelaxparams.space.ctrl.GetCurrentSelection()
+            self.gui_params = self.job.init_gui(self.gui_params, sess=self.sess)
 
     def OnLstJobSelected(self):
         index = self.job.list.ctrl.currentRow()
         logger.debug(f"OnLstJobSelected index {index}")
         self.gui_params['job_project_id'] = self.job.list.ctrl.item(index, 0).text()
         logger.debug(f"Job project id {self.gui_params['job_project_id']} project id {self.gui_params['project_id']}")
-        self.gui_params['job_id'] = self.job.get_job_id_by_job_project_id(self.gui_params['job_project_id'],
-                                                                                          self.gui_params['project_id'],
+        self.gui_params['job_id'] = self.job.get_job_id_by_job_project_id(self.gui_params['project_id'],
+                                                                          self.gui_params['job_project_id'],
                                                                                           self.sess)
         logger.debug(f"{self.gui_params['job_id']}")
         self.gui_params['job_name'] = self.fastrelaxparams.get_name_by_job_id(self.gui_params['job_id'],
@@ -590,13 +672,16 @@ class MainFrame(QtWidgets.QMainWindow):
         self.gui_params['log_file'] = self.job.get_log_file(self.gui_params['project_path'],
                                                 self.gui_params['job_project_id'],
                                                 self.gui_params['job_name'])
+        
+        logger.debug(f"Queue: {self.gui_params['queue']}")
         self.gui_params['other_settings_changed'] = False
         logger.debug(f"====================>> job project id: {self.gui_params['job_project_id']}")
         logger.debug(f"Job ID: {self.gui_params['job_id']}")
         result = self.fastrelaxparams.get_params_by_job_id(self.gui_params['job_id'], self.sess)
         logger.debug(f"job id {result.job_id}")
         self.fastrelaxparams.update_from_db(result)
-        self.job.update_log(self.gui_params)
+        self.gui_params['queue'] = self.fastrelaxparams.queue.value
+        self.job.update_log(log_file=self.gui_params['log_file'])
         self.job.insert_validation(self.validation, self.gui_params, self.sess)
         if self.validation.check_exists(self.gui_params['job_id'], self.sess):
             self.notebook.setTabEnabled(2, True)
@@ -613,7 +698,7 @@ class MainFrame(QtWidgets.QMainWindow):
 
             job_name = self.job.list.ctrl.item(item.row(), 1).text()
 
-            job_id = self.job.get_job_id_by_job_project_id(job_project_id, self.gui_params['project_id'], self.sess)
+            job_id = self.job.get_job_id_by_job_project_id(self.gui_params['project_id'], job_project_id, self.sess)
             job_dir = self.job.get_job_dir(job_project_id, job_name)
             project_path = self.prj.get_path_by_project_id(self.gui_params['project_id'], self.sess)
             job_path = self.job.get_job_path(project_path, job_dir)
@@ -632,24 +717,22 @@ class MainFrame(QtWidgets.QMainWindow):
             self.set_running_action.triggered.connect(lambda state, x=job_id: self.OnStatusRunning(x))
             menu.exec_(self.job.list.ctrl.mapToGlobal(pos))
 
-
-
     def OnDeleteEntry(self, job_id):
         logger.debug(f"OnDeleteEntry. Job id {job_id}")
         self.job.delete_job(job_id, self.sess)
-        self.gui_params = self.job.init_gui(self.gui_params, self.sess)
+        self.gui_params = self.job.init_gui(self.gui_params, sess=self.sess)
 
     def OnDeleteEntryFiles(self, job_id, job_path):
         self.job.delete_job_files(job_id, job_path, self.sess)
-        self.gui_params = self.job.init_gui(self.gui_params, self.sess)
+        self.gui_params = self.job.init_gui(self.gui_params, sess=self.sess)
 
     def OnStatusRunning(self, job_id):
         self.job.update_status("running", job_id, self.sess)
-        self.gui_params = self.job.init_gui(self.gui_params, self.sess)
+        self.gui_params = self.job.init_gui(self.gui_params, sess=self.sess)
 
     def OnStatusFinished(self, job_id):
         self.job.update_status("finished", job_id, self.sess)
-        self.gui_params = self.job.init_gui(self.gui_params, self.sess)
+        self.gui_params = self.job.init_gui(self.gui_params, sess=self.sess)
 
 
     def OnBtnPrjAdd(self):

@@ -12,6 +12,7 @@
 #See the License for the specific language governing permissions and
 #limitations under the License.
 from __future__ import absolute_import
+from typing import Union
 import pkg_resources
 import datetime
 import sys
@@ -23,6 +24,7 @@ import socket
 import rosem.rosemcl as relax
 import sqlalchemy.orm.exc
 from PyQt5 import QtWidgets, QtGui, QtCore
+from jinja2 import FileSystemLoader, Environment, meta, PackageLoader
 from PyQt5.QtWidgets import QTableWidget
 import traceback
 from shutil import copyfile, rmtree
@@ -47,7 +49,8 @@ install_path = os.path.dirname(os.path.realpath(sys.argv[0]))
 class Variable:
     """Basic model for GUI controls and DB tables"""
 
-    def __init__(self, var_name=None,
+    def __init__(self, 
+                 var_name=None,
                  type=None,
                  db=True,
                  ctrl_type=None,
@@ -55,7 +58,8 @@ class Variable:
                  db_foreign_key=None,
                  db_relationship=None,
                  db_backref=None,
-                 cmb_dict=None):
+                 cmb_dict=None,
+                 cmd=None):
         self.var_name = var_name
         self.value = None
         self.type = type
@@ -67,6 +71,7 @@ class Variable:
         self.db_foreign_key = db_foreign_key
         self.db_primary_key = db_primary_key
         self.cmb_dict = cmb_dict
+        self.cmd = cmd
         self.selected_item = None
 
     def set_ctrl_type(self):
@@ -159,16 +164,16 @@ class Variable:
 
             elif self.ctrl_type == 'tbl':
                 while self.ctrl.rowCount() > 0:
-                    self.ctrl.removeRow(0);
+                    self.ctrl.removeRow(0)
         else:
             logger.debug(f"ctrl of {self.var_name} is not bound.")
 
 
 class File(Variable):
     """Model for files loaded as parameters"""
-    def __init__(self, var_name=None, type=None, db=True, ctrl_type=None, db_primary_key=False, db_foreign_key=None,
-                 file_ext=None, unique=False, file_type=None):
-        super().__init__(var_name, type, db, ctrl_type, db_primary_key, db_foreign_key)
+    def __init__(self, *args, file_ext=None, unique=False, file_type=None, **kwargs,
+                 ):
+        super().__init__(*args, **kwargs)
         self.file_ext = file_ext
         self.unique = unique
         self.file_type = file_type
@@ -183,15 +188,15 @@ class File(Variable):
 
 class TblCtrlJobs(Variable):
     """GUI list control which shows jobs for project"""
-    def __init__(self, var_name=None, type=None, db=True, ctrl_type=None, db_primary_key=False, db_foreign_key=None):
-        super().__init__(var_name, type, db, ctrl_type, db_primary_key, db_foreign_key)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.selected_item = None
 
 
 class TblCtrlReport(Variable):
     """GUI list control which shows validation report"""
-    def __init__(self, var_name=None, type=None, db=True, ctrl_type=None, db_primary_key=False, db_foreign_key=None):
-        super().__init__(var_name, type, db, ctrl_type, db_primary_key, db_foreign_key)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.report_dict = {}
 
     def register(self, parameter):
@@ -200,8 +205,8 @@ class TblCtrlReport(Variable):
 
 class TblCtrlFiles(Variable):
     """GUI list control which shows loaded files"""
-    def __init__(self, var_name=None, type=None, db=True, ctrl_type=None, db_primary_key=False, db_foreign_key=None):
-        super().__init__(var_name, type, db, ctrl_type, db_primary_key, db_foreign_key)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.file_dict = {}
         self.selected_item = None
 
@@ -445,6 +450,30 @@ class GUIVariables:
         else:
             logger.warning("Default values empty. Nothing to update.")
 
+    def get_dict_cmd(self, foreign_obj: object = None) -> dict:
+        """Get dict with values that are required for running a command."""
+        cmd_dict = {}
+        for var in vars(self):
+            obj = getattr(self, var)
+            if hasattr(obj, 'cmd'):
+                if obj.cmd is True:
+                    if hasattr(obj, 'ctrl_type'):
+                        if obj.ctrl_type == 'chk':
+                            if not isinstance(obj.value, bool):
+                                if not obj.value is None:
+                                    if obj.value.lower() == 'true':
+                                        cmd_dict[obj.var_name] = ""
+                            else:
+                                if obj.value:
+                                    cmd_dict[obj.var_name] = ""
+                        else:
+                            if obj.is_set():
+                                cmd_dict[obj.var_name] = obj.value
+                    else:
+                        if obj.is_set():
+                            cmd_dict[obj.var_name] = obj.value
+        return cmd_dict
+    
     def get_dict_run_job(self):
         job_dict = {}
         for var in vars(self):
@@ -458,15 +487,23 @@ class GUIVariables:
     def get_dict_db_insert(self, foreign_obj=None):
         insert_dict = {}
         for var in vars(self):
+            logger.debug(var)
             obj = getattr(self, var)
             if hasattr(obj, 'db'):
                 if obj.db is True and obj.db_primary_key is False and obj.db_foreign_key is None and obj.db_relationship is None:
                     logger.debug(f"dict db insert var {var} value {obj.value}")
                     if obj.is_set():
                         insert_dict[obj.var_name] = obj.value
+                    else:
+                        logger.debug(f"{var} not set")
                 elif not obj.db_relationship is None:
+                    logger.debug(f"Adding db relationship for {var}")
                     if not foreign_obj is None:
                         insert_dict[obj.var_name] = foreign_obj
+                else:
+                    logger.debug(f"db attribute for {var} is {obj.db}")
+            else:
+                logger.debug(f"{var} has no db attribute")
         return [insert_dict]
 
 
@@ -480,8 +517,8 @@ class Validation(GUIVariables):
                                      None,
                                      db=False,
                                      ctrl_type='tbl')
-        self.weight = Variable('weight', 'int')
-        self.reports.register(self.weight)
+        #self.weight = Variable('weight', 'int')
+        #self.reports.register(self.weight)
         self.bonds = Variable('bonds', 'float')
         self.reports.register(self.bonds)
         self.angles = Variable('angles', 'float')
@@ -646,26 +683,27 @@ class FastRelaxParams(GUIVariables):
         self.job_id = Variable('job_id', 'int', db_foreign_key='job.id')
         #self.job = Variable('job', None, db_relationship='Job')
         self.name = Variable('name', 'str')
-        self.resolution = Variable('resolution', 'int', ctrl_type='dsb')
-        self.weight = Variable('weight', 'int', ctrl_type='lei')
-        self.num_models = Variable('num_models', 'int', ctrl_type='sbo')
-        self.num_cycles = Variable('num_cycles', 'int', ctrl_type='sbo')
-        self.nproc = Variable('nproc', 'int', ctrl_type='sbo')
-        self.selection = Variable('selection', 'str', ctrl_type='pte')
-        self.validation = Variable('validation', 'bool', ctrl_type='chk')
-        self.bfactor = Variable('bfactor', 'bool', ctrl_type='chk')
-        self.fastrelax = Variable('fastrelax', 'bool', ctrl_type='chk')
-        self.norepack = Variable('norepack', 'bool', ctrl_type='chk')
-        self.dihedral_cst_weight = Variable('dihedral_cst_weight', 'float', ctrl_type='dsb')
-        self.distance_cst_weight = Variable('distance_cst_weight', 'float', ctrl_type='dsb')
-        self.bond_cst_weight = Variable('bond_cst_weight', 'float', ctrl_type='dsb')
-        self.angle_cst_weight = Variable('angle_cst_weight', 'float', ctrl_type='dsb')
-        self.ramachandran_cst_weight = Variable('ramachandran_cst_weight', 'float', ctrl_type='dsb')
-        self.sc_weights = Variable('sc_weights', 'str', ctrl_type='pte')
+        self.resolution = Variable('resolution', 'int', ctrl_type='dsb', cmd=True)
+        self.weight = Variable('weight', 'int', ctrl_type='lei', cmd=True)
+        self.num_models = Variable('num_models', 'int', ctrl_type='sbo', cmd=True)
+        self.num_cycles = Variable('num_cycles', 'int', ctrl_type='sbo', cmd=True)
+        self.nproc = Variable('nproc', 'int', ctrl_type='sbo', cmd=True)
+        self.selection = Variable('selection', 'str', ctrl_type='pte', cmd=True)
+        self.validation = Variable('validation', 'bool', ctrl_type='chk', cmd=True)
+        self.queue = Variable('queue', 'bool', ctrl_type='chk')
+        self.bfactor = Variable('bfactor', 'bool', ctrl_type='chk', cmd=True)
+        self.fastrelax = Variable('fastrelax', 'bool', ctrl_type='chk', cmd=True)
+        self.norepack = Variable('norepack', 'bool', ctrl_type='chk', cmd=True)
+        self.dihedral_cst_weight = Variable('dihedral_cst_weight', 'float', ctrl_type='dsb', cmd=True)
+        self.distance_cst_weight = Variable('distance_cst_weight', 'float', ctrl_type='dsb', cmd=True)
+        self.bond_cst_weight = Variable('bond_cst_weight', 'float', ctrl_type='dsb', cmd=True)
+        self.angle_cst_weight = Variable('angle_cst_weight', 'float', ctrl_type='dsb', cmd=True)
+        self.ramachandran_cst_weight = Variable('ramachandran_cst_weight', 'float', ctrl_type='dsb', cmd=True)
+        self.sc_weights = Variable('sc_weights', 'str', ctrl_type='pte', cmd=True)
         self.space_dict = {0: 'Cartesian',
                            1: 'Torsional'}
-        self.space = Variable('space', 'int', ctrl_type='cmb', cmb_dict=self.space_dict)
-        self.self_restraints = Variable('self_restraints', 'bool', ctrl_type='chk')
+        self.space = Variable('space', 'int', ctrl_type='cmb', cmb_dict=self.space_dict, cmd=True)
+        self.self_restraints = Variable('self_restraints', 'bool', ctrl_type='chk', cmd=True)
         self.files = TblCtrlFiles('files',
                                   None,
                                   db=False,
@@ -675,49 +713,56 @@ class FastRelaxParams(GUIVariables):
                                file_ext='.pdb',
                                unique=True,
                                file_type='Model',
-                               ctrl_type=None)
+                               ctrl_type=None, 
+                               cmd=True)
         self.files.register(self.model_file)
         self.map_file = File(var_name='map_file',
                              type='str',
                              file_ext='.mrc',
                              unique=True,
                              file_type='Map',
-                             ctrl_type=None)
+                             ctrl_type=None,
+                              cmd=True)
         self.files.register(self.map_file)
         self.test_map_file = File(var_name='test_map_file',
                                   type='str',
                                   file_ext='.mrc',
                                   unique=True,
                                   file_type='Test Map',
-                                  ctrl_type=None)
+                                  ctrl_type=None, 
+                                  cmd=True)
         self.files.register(self.test_map_file)
         self.symm_file = File(var_name='symm_file',
                               type='str',
                               file_ext='.symm',
                               unique=False,
                               file_type='Symmetry Definition',
-                              ctrl_type=None)
+                              ctrl_type=None, 
+                              cmd=True)
         self.files.register(self.symm_file)
         self.params_files = File(var_name='params_files',
                                 type='str',
                                 file_ext='.params',
                                 unique=False,
                                 file_type='Params',
-                                ctrl_type=None)
+                                ctrl_type=None, 
+                                cmd=True)
         self.files.register(self.params_files)
         self.cst_file = File(var_name='cst_file',
                              type='str',
                              file_ext='.cst',
                              unique=False,
                              file_type='Constraints',
-                             ctrl_type=None)
+                             ctrl_type=None, 
+                             cmd=True)
         self.files.register(self.cst_file)
         self.reference_model = File(var_name='reference_model',
                                     type='str',
                                     file_ext='.pdb',
                                     unique=True,
                                     file_type='Reference Model',
-                                    ctrl_type=None)
+                                    ctrl_type=None,
+                                     cmd=True)
         self.files.register(self.reference_model)
         self.name.set_value("FastRelaxDens")
 
@@ -930,11 +975,13 @@ class Job(GUIVariables):
         self.list = TblCtrlJobs('list', None, db=False, ctrl_type='tbl')
         self.timestamp = Variable('timestamp', 'str')
         self.log = Variable('log', 'str', db=False, ctrl_type='pte')
-        self.log_file = Variable('log_file', 'str', db=True)
+        self.log_file = Variable('log_file', 'str', db=True, cmd=True)
         self.status = Variable('status', 'str', db=True)
         self.pid = Variable('pid', 'str', db=True)
+        self.queue = Variable('queue', 'str', db=True)
         self.host = Variable('host', 'str', db=True)
         self.path = Variable('path', 'str', db=True)
+        self.active = Variable('active', 'bool', db=True)
 
     def set_db(self, db):
         self.db = db
@@ -962,6 +1009,85 @@ class Job(GUIVariables):
         else:
             return result.job_project_id
 
+    def get_job_status_from_log(self, params):
+        logger.debug(f"Updating job status params")
+        exit_code = None
+        job_status = None
+        exit_code_script = None
+        exit_code_queue = None
+        #try:
+        lines = []
+        #logger.debug(params)
+        log_file = os.path.join(params['job_path'], params['log_file'])
+
+        if params['log_file_lines']:
+            #Only lines added since last update
+            lines = params['log_file_lines']
+        elif os.path.exists(log_file):
+            #All lines read again, reset counter
+            logger.debug(f"Reading from {log_file}")
+            with open(log_file, 'r') as f:
+                lines = f.readlines()
+        else:
+            msg = f'Log file {log_file} does not exist'
+            params['errors'].append(msg)
+            return params
+
+        for line in lines:
+            pattern_exit_code_script = re.compile(r'exit\scode\s(\d+)')
+            pattern_exit_code_queue = re.compile(r'Workflow\sfinished\swith\scode\s(\d+)')
+            pattern_started = re.compile(r'Starting pipeline')
+            cancelled_pattern = re.compile(r'Aborted|CANCELLED')
+            pattern_finished =  re.compile(r"RosEM pipeline completed")
+            if re.search(pattern_exit_code_script, line):
+                exit_code_script = int(re.search(pattern_exit_code_script, line).group(1))
+                logger.debug(f"Exit code from script found in log file {exit_code_script}")
+            if re.search(pattern_exit_code_queue, line):
+                exit_code_queue = int(re.search(pattern_exit_code_queue, line).group(1))
+                logger.debug(f"Exit code from queue found in log file {exit_code_queue}")
+            if re.search(cancelled_pattern, line):
+                exit_code = 2
+                logger.debug(f"Cancelled pattern found in log file {exit_code_queue}")
+            if re.search(pattern_started, line):
+                job_status = 'running'
+            if re.search(pattern_finished, line):
+                job_status = 'finished'
+        
+        logger.debug(f"exit_code_script {exit_code_script} exit_code_queue {exit_code_queue}")
+        if exit_code_queue is None:
+            if exit_code_script == 1:
+                exit_code = 1
+            elif exit_code_script == 2:
+                exit_code = 2
+            elif exit_code_script == 0:
+                exit_code = 0
+        else:
+            if exit_code_script == 1 or exit_code_queue == 1:
+                logger.debug("Either exit code script or exit code_queue is 1")
+                exit_code = 1
+            elif exit_code_script == 2:
+                logger.debug("Exit code script is 2")
+                exit_code = 2
+            elif exit_code_script == 0 and exit_code_queue == 0:
+                logger.debug("Exit code script and exit_code_queue are 0")
+                exit_code = 0
+            elif exit_code_queue == 0 and exit_code_script is None:
+                #Assume there is an error if there is no exit code from the script
+                exit_code = 1
+            elif exit_code_queue:
+                if exit_code_queue > 2:
+                    exit_code = 1
+        
+        if not 'status' in params:
+            params['status'] = "unknown"
+        if not job_status is None:
+            params['status'] = job_status
+        if not 'exit_code' in params:
+            params['exit_code'] = None
+        params['exit_code'] = exit_code
+        logger.debug(params)
+        return params
+
 
     def get_next_job_project_id(self, project_id, sess):
         max_id = self.get_max_job_project_id(project_id, sess)
@@ -975,13 +1101,27 @@ class Job(GUIVariables):
         self.job_project_id.value = job_project_id
         logger.debug(f"job_project_id is {job_project_id}")
 
-    def get_job_id_by_job_project_id(self, job_project_id, project_id, sess):
+    def get_job_id_by_job_project_id(self, project_id, job_project_id, sess):
         result = sess.query(self.db.Job).filter_by(project_id=project_id, job_project_id=job_project_id).first()
         return result.id
+    
+    def get_job_project_id_by_job_id(self, job_id, project_id, sess):
+        result = sess.query(self.db.Job).filter_by(project_id=project_id, job_id=job_id).first()
+        return result.job_project_id
 
     def get_pid(self, job_id, sess):
         result = sess.query(self.db.Job).get(job_id)
         return result.pid
+
+    def get_queue_job_id(self, log_file):
+        queue_job_id = None
+        with open(log_file, 'r') as f:
+            lines = f.readlines()
+        regex = re.compile("QUEUE_JOB_ID=(\d+)")
+        for l in lines:
+            if re.search(regex, l):
+                queue_job_id = re.search(regex, l).group(1)
+        return queue_job_id
 
     def get_host(self, job_id, sess):
         result = sess.query(self.db.Job).get(job_id)
@@ -992,27 +1132,83 @@ class Job(GUIVariables):
         result.pid = pid
         sess.commit()
 
-    # def convert_protocol(self, cmd_dict):
-    #     conversion = {"FastRelax": "1",
-    #                   "Backbone Minimization": "2",
-    #                   "Allatom Minimization": "3",
-    #                   "Automatic rebuilding": "4",
-    #                   "Ramachandran-based rebuilding": "5",
-    #                   "Only B-factor refinement": "6"}
-    #     cmd_dict['protocol'] = conversion[cmd_dict['protocol']]
-
     def convert_space(self, cmd_dict):
         conversion = {"Cartesian": "cartesian",
                       "Torsional": "torsional"}
         cmd_dict['space'] = conversion[cmd_dict['space']]
 
-    def prepare_cmd(self, job_params):
-        cmd_dict = job_params.copy()
+    def prepare_submission_script(self, job_params, job_args, queue_errors):
+        cpu = job_params["nproc"]
+        account = job_params["queue_account"]
+        #mem = os.path.getsize(job_params['map_file']) + 1000000
+        #1 GB default per process
+        mem = 1
+        command = ['rosemcl'] + job_args
+        command = ' '.join(command)
+        logfile = job_params["log_file"]
+        submission_script = os.path.join(job_params['job_path'], "submission_script.run")
+
+        submission_script_template = job_params['submission_script_template_path']
+        if submission_script_template:
+            if os.path.exists(submission_script_template):
+                env = Environment(loader=FileSystemLoader(os.path.dirname(submission_script_template)))
+                template = env.get_template(os.path.basename(submission_script_template))
+                template_source = env.loader.get_source(env, os.path.basename(submission_script_template))
+            else:
+                msg = f"Custom submission script not found in {submission_script_template}!"
+                queue_errors.append(msg)
+                logger.debug(msg)
+                return None
+        else:
+            env = Environment(loader=PackageLoader("rosem", "templates"))
+            template = env.get_template('submission_script.j2')
+            template_source = env.loader.get_source(env, 'submission_script.j2')
+            if not os.path.exists(template.filename):
+                msg = f"Global submission script template not found in {template.filename}. A custom submission script template can be defined in settings."
+                queue_errors.append(msg)
+                logger.debug(msg)
+                return None
+        parsed_content = env.parse(template_source)
+        template_vars = meta.find_undeclared_variables(parsed_content)
+        to_render = {}
+
+        if 'account' in template_vars:
+            if not job_params['queue_account'] is None:
+                to_render['account'] = account
+            else:
+                queue_errors.append("Queue account name variable specified in template but no account found."
+                            " Please specify account in the Settings dialog or remove the variable from the template.")
+                return None
+        if 'cpu' in template_vars:
+            to_render['cpu'] = cpu
+        if 'mem' in template_vars:
+            to_render['mem'] = mem
+        if not 'command' in template_vars:
+            queue_errors.append("Command variable not found in the submission script template. This item is mandatory.")
+            return None
+        else:
+            to_render['command'] = command
+        if not 'logfile' in template_vars:
+            queue_errors.append("log_file variable not found in the submission script template. This item is mandatory.")
+            return None
+        else:
+            to_render['logfile'] = logfile
+
+
+        rendered = template.render(**to_render)
+
+        logger.debug(f"Writing to file {submission_script}")
+        with open(submission_script, 'w') as f:
+            f.write(rendered)
+        return submission_script
+
+
+    def prepare_cmd(self, cmd_dict, job_params, queue_errors):
         #self.convert_protocol(cmd_dict)
         self.convert_space(cmd_dict)
-        del cmd_dict['id']
-        del cmd_dict['job_id']
-        excluded_args = ['model_file', 'map_file', 'symm_file', 'cst_file', 'files']
+        submission_script = None
+        excluded_args = ['model_file', 'map_file', 'symm_file', 'cst_file',
+                          'files',]
         #put selection in parantheses
         for k, v in cmd_dict.items():
             if k == 'selection':
@@ -1023,9 +1219,18 @@ class Job(GUIVariables):
         job_args = ['--{} {}'.format(k, v) if not k in excluded_args else v for k, v in cmd_dict.items()]
         logger.debug(job_args)
         job_args = [re.sub(r'\sTrue', '', x) for x in job_args if not x is None if not re.search(r'\sFalse', x)]
-        cmd = ['rosemcl'] + job_args
+        if job_params['queue']:
+            #dlg = self.dlg_queue
+            #if dlg.ShowModal():
+            #    dlg.Close()
+            queue_submit = job_params['queue_submit']
+            submission_script = self.prepare_submission_script(job_params, job_args, queue_errors)
+
+            cmd = [queue_submit, submission_script]
+        else:
+            cmd = ['rosemcl'] + job_args
         logger.debug("Job command\n{}".format(cmd))
-        return cmd
+        return cmd, submission_script
 
     def insert_validation(self, _validation, job_params, sess):
         if not _validation.check_exists(job_params['job_id'], sess):
@@ -1099,6 +1304,9 @@ class Job(GUIVariables):
     def set_host(self):
         self.host.value = socket.gethostname()
 
+    def hostname(self) -> str:
+        return socket.gethostname()
+
     def get_jobs_by_project_id(self, project_id, sess):
         result = sess.query(self.db.Job).filter_by(project_id=project_id)
         return result
@@ -1117,16 +1325,30 @@ class Job(GUIVariables):
             lines = log.readlines()
         return lines
 
-    def update_log(self, gui_params):
-        if 'log_file' in gui_params:
-            logger.debug(f"Log file: {gui_params['log_file']}")
-            if os.path.exists(gui_params['log_file']):
+    def update_log(self, log_lines: str = None, log_file: str = None, job_id_active: int = None, job_id_thread: int = None, append: bool = False) -> None:
+        """ Updates the log control """
+        logger.debug("Updating log")
+        if (job_id_active == job_id_thread) or job_id_thread is None:
+            if not append:
                 self.log.reset_ctrl()
-                lines = self.read_log(gui_params['log_file'])
-                for line in lines:
-                    self.log.ctrl.appendPlainText(line)
+            if log_file:
+                if os.path.exists(log_file):
+                    logger.debug(f"Reading from {log_file}")
+                    with open(log_file, 'r') as f:
+                        lines = f.readlines()
+                else:
+                    logger.error(f"Log file {log_file} does not exist!")
+                    lines = []
+            elif log_lines:
+                logger.debug("Found log lines")
+                lines = log_lines
+            logger.debug("Appending lines")
+            for line in lines:
+                self.log.ctrl.appendPlainText(line.strip('\n'))
+        else:
+            logger.debug("job ids do not match or LogTab not selected")
 
-    def get_path_by_project_id(self, project_id, sess):
+    def get_path_by_project_id(self, project_id: int, sess: sqlalchemy.orm.session.Session):
         result = sess.query(self.db.Project.path).filter_by(id=project_id).first()
         return result[0]
 
@@ -1138,10 +1360,21 @@ class Job(GUIVariables):
         job_path = os.path.join(project_path, job_dir)
         return job_path
 
+    def get_queue_pid(self, log_file: str, job_id: int, sess: sqlalchemy.orm.session.Session) -> Union[str, None]:
+        pid = None
+        regex = re.compile(r'QUEUE_JOB_ID=(\d+)')
+        logger.debug(f"Reading from {log_file}")
+        with open(log_file, 'r') as f:
+            content = f.read()
+        if re.search(regex, content):
+            pid = re.search(regex, content).group(1)
+        if not pid is None:
+            self.update_pid(pid, job_id, sess)
+        logger.debug(f"pid from log file is {pid}.")
+        return pid
+
     def get_log_file(self, project_path, job_project_id, job_name):
-        job_dir = self.get_job_dir(job_project_id, job_name)
-        job_path = self.get_job_path(project_path, job_dir)
-        log_file = os.path.join(job_path, f"{job_project_id}_{job_name}.log")
+        log_file = os.path.join(project_path, f"{job_project_id}_{job_name}", f"{job_project_id}_{job_name}.log")
         return log_file
 
     def set_log_file(self, log_file):
@@ -1157,39 +1390,50 @@ class Job(GUIVariables):
         except OSError:
             return False
 
-    def reconnect_jobs(self, sess):
-    #     max_runtime = 60 * 60 * 24 * 2
+    def reconnect_jobs(self, sess: sqlalchemy.orm.session.Session) -> list:
         jobs_running = []
-        result = sess.query(self.db.Job).filter_by(status="running")
+        result = sess.query(self.db.Job).filter((self.db.Job.status=="running") | (self.db.Job.status=="starting") | (self.db.Job.status=="waiting")).all()
+
         for job in result:
-            jobs_running.append({'job_id': job.id, 'job_path': job.path, 'log_file': job.log_file, 'pid': job.pid})
-    #
-    #     for job in result:
-    #         if not job.log_file is None:
-    #             if not os.path.exists(job.log_file):
-    #                 self.update_status("error", job.id)
-    #             else:
-    #                 exit_code = self.get_exit_code_from_log(job.log_file)
-    #                 # runtime = (datetime.datetime.now() - job.timestamp).total_seconds()
-    #                 if exit_code is None:
-    #                     if self.check_pid(job.pid):
-    #                         jobs_running.append({'id': job.id, 'log_file': job.log_file})
-    #                     else:
-    #                         self.update_status("error", job.id)
-    #
-    #                 elif int(exit_code) == 1:
-    #                     self.update_status("error", job.id)
-    #                 elif int(exit_code) == 0:
-    #                     self.update_status("finished", job.id)
-    #         else:
-    #             try:
-    #                 self.update_status("error", job.id)
-    #             except:
-    #                 pass
-    #
+            logger.debug(f"Job id {job.id}")
+            try:
+                jobparams = sess.query(self.db.Fastrelaxparams).filter(self.db.Fastrelaxparams.job_id == job.id).one()
+            except sqlalchemy.orm.exc.NoResultFound:
+                jobparams = None
+                continue
+            project_path = self.get_path_by_project_id(job.project_id, sess)
+            jobs_running.append({'job_id': job.id,
+                                 'job_project_id': job.job_project_id,
+                                 'queue': jobparams.queue,
+                                 'status': job.status,
+                                 'job_path': job.path,
+                                 'job_name': jobparams.name,
+                                 'project_path': project_path,
+                                 'log_file': self.get_log_file(project_path, job.job_project_id, jobparams.name),
+                                 'pid': job.pid,
+                                 'time_started': job.timestamp})
+            logger.debug(f"Reconnect job {job.id}, {job.job_project_id}, {job.status}")
         return jobs_running
 
-    def init_gui(self, gui_params, sess=None):
+    def get_active_job_id(self, sess: sqlalchemy.orm.Session) -> int:
+        result = sess.query(self.db.Job).filter_by(active=True).first()
+        if result:
+            return result.id
+        else:
+            return None
+
+    def set_job_active(self, job_id: int, sess: sqlalchemy.orm.Session) -> int:
+        #Set all jobs inactive first
+        active_jobs = sess.query(self.db.Job).filter_by(active=True).all()
+        for i, item in enumerate(active_jobs):
+            active_jobs[i].active = False
+        #Set job active by job_id
+        job = sess.query(self.db.Job).get(job_id)
+        if job:
+            job.active = True
+        sess.commit()
+
+    def init_gui(self, gui_params, other=None, sess=None):
         logger.debug("=== Init Job list ===")
         # Clear Lists
         self.list.reset_ctrl()
@@ -1226,8 +1470,27 @@ class Job(GUIVariables):
                 self.list.ctrl.setItem(rows , 0, QtWidgets.QTableWidgetItem(str(job.job_project_id)))
                 self.list.ctrl.setItem(rows , 1, QtWidgets.QTableWidgetItem("FastRelaxDens"))
                 self.list.ctrl.setItem(rows , 2, QtWidgets.QTableWidgetItem(status))
-        # Fill log
-        #self.update_log(gui_params)
+
+        # Automatically scroll to the bottom
+        #last_item = self.list.ctrl.topLevelItem(self.list.ctrl.topLevelItemCount() - 1)
+        self.list.ctrl.scrollToBottom()
+
+        if gui_params['job_id'] is None:
+            gui_params['job_id'] = self.get_active_job_id(sess)
+            if gui_params['job_id'] and gui_params['job_project_id']:
+                gui_params['job_dir'] = self.get_job_dir(gui_params['job_project_id'], gui_params['job_name'])
+                logger.debug(f"job_id is None, getting last active job from DB: {gui_params['job_id']}")
+            else:
+                logger.debug(f"project_id: {project_id}")
+                job_project_id = self.get_max_job_project_id(project_id, sess)
+                if job_project_id:
+                    logger.debug(f"job_project_id: {job_project_id}")
+                    gui_params['job_id'] = self.get_job_id_by_job_project_id(project_id, job_project_id, sess)
+                    logger.debug(f"No active job found in DB. Using last job from the list: {gui_params['job_id']}")
+        else:
+            self.set_job_active(gui_params['job_id'], sess)
+            logger.debug(f"Setting {gui_params['job_id']} to active.")
+
         return gui_params
 
 
@@ -1236,14 +1499,19 @@ class Settings(GUIVariables):
         self.db = None
         self.db_table = 'settings'
         self.id = Variable('id', 'int', db_primary_key=True)
-        self.rosetta_path = Variable('rosetta_path', 'str', ctrl_type='lei')
-        self.phenix_path = Variable('phenix_path', 'str', ctrl_type='lei')
+        self.rosetta_path = Variable('rosetta_path', 'str', ctrl_type='lei', cmd=True)
+        self.phenix_path = Variable('phenix_path', 'str', ctrl_type='lei', cmd=True)
+        self.queue_template = Variable('queue_template', 'str', ctrl_type='lei')
+        self.queue_submit = Variable('queue_submit', 'str', ctrl_type='lei')
+        self.queue_cancel = Variable('queue_cancel', 'str', ctrl_type='lei')
+        self.queue_jobid_regex = Variable('queue_jobid_regex', 'str', ctrl_type='lei')
+        self.queue_account = Variable('queue_account', 'str', ctrl_type='lei')
         self.global_config = Variable('global_config', 'bool', ctrl_type='chk')
 
     def set_db(self, db):
         self.db = db
 
-    def init_gui(self, gui_params, sess):
+    def init_gui(self, gui_params, sess=None):
         return gui_params
 
     def get_from_db(self, sess):
@@ -1303,27 +1571,21 @@ class Settings(GUIVariables):
             logger.debug("check phenix")
             self.path.set_exec('phenix', 'phenix.validation_cryoem')
             logger.debug("check phenix")
-        except FileNotFoundError:
+        except (SystemExit, FileNotFoundError):
             messages.append("Phenix executables not found. Check path in settings!")
         try:
             self.path.set_exec('phenix', 'phenix.real_space_refine')
         except FileNotFoundError:
             messages.append("Phenix executables not found. Check path in settings!")
             pass
-        except NotADirectoryError:
-            messages.append("Phenix executables could not be set because the given path is not a directory.")
-            pass
-        except SystemExit:
+        except (SystemExit, FileNotFoundError):
             pass
         try:
             self.path.set_exec('rosetta', 'rosetta_scripts', 'python|mpi')
         except FileNotFoundError:
             messages.append("Rosetta executables not found. Check path in settings!")
             pass
-        except NotADirectoryError:
-            messages.append("Rosetta executables could not be set because the given path is not a directory.")
-            pass
-        except SystemExit:
+        except (SystemExit, FileNotFoundError):
             pass
 
 
@@ -1369,6 +1631,9 @@ class Settings(GUIVariables):
             logger.debug("Adding frist entry to settings")
             self.db_insert_settings([{'rosetta_path': '',
                                      'phenix_path': '',
+                                     'queue_template': '',
+                                     'queue_submit': '',
+                                     'queue_cancel': '',
                                      'global_config': False}], sess)
 
 

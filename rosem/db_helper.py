@@ -11,6 +11,7 @@
 #WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #See the License for the specific language governing permissions and
 #limitations under the License.
+from shutil import copyfile
 from sqlalchemy import MetaData, Table, Column, String, Boolean, Integer, Float, DateTime, ForeignKey, MetaData, create_engine, func
 from sqlalchemy.inspection import inspect
 from sqlalchemy.ext.automap import automap_base
@@ -22,6 +23,7 @@ import os
 #Base = declarative_base()
 logger = logging.getLogger('RosEM')
 
+DB_REVISION = 1
 
 def get_type(type):
     types = {'str': String,
@@ -40,16 +42,18 @@ class DBHelper:
         #self.add_attr(self.job)
         #self.add_attr(self.prj)
         self._DATABASE_NAME = 'rosem'
-        db_path = os.path.join(os.path.expanduser("~"), '.rosem.db')
+        self.db_path = db_path = os.path.join(os.path.expanduser("~"), '.rosem.db')
         self.engine = create_engine('sqlite:///{}'.format(db_path), connect_args={'check_same_thread': False})
+        name = '.'.join([__name__, self.__class__.__name__])
+        self.logger = logging.getLogger(name)
+
+    def init_db(self) -> None:
         self.reflect_tables()
         self.create_tables()
         self.conn = None
         session_factory = sessionmaker(bind=self.engine)
         self.Session = scoped_session(session_factory)
         self.sess = None
-        name = '.'.join([__name__, self.__class__.__name__])
-        self.logger = logging.getLogger(name)
 
     def reflect_tables(self):
         """
@@ -184,3 +188,34 @@ class DBHelper:
         finally:
             self.Session.remove()
 
+    def backup_db(self, db_path):
+        prev_db_revision = DB_REVISION - 1
+        rosem_dir = os.path.join(os.path.expanduser("~"), f'.rosem')
+        if not os.path.exists(rosem_dir):
+            os.mkdir(rosem_dir)
+        backup_db_path = os.path.join(rosem_dir, f'rosem.db.{prev_db_revision}')
+        if not os.path.exists(backup_db_path):
+            if os.path.exists(db_path):
+                copyfile(db_path, backup_db_path)
+
+    def upgrade_db(self):
+        logger.debug("Upgrading DB")
+        self.backup_db(self.db_path)
+        #stmts = ['ALTER TABLE settings ADD queue_submit_dialog BOOLEAN DEFAULT FALSE']
+        stmts = ['ALTER TABLE settings ADD queue_jobid_regex VARCHAR DEFAULT NULL']
+        stmts += ['ALTER TABLE settings ADD queue_account VARCHAR DEFAULT NULL']
+        stmts += ['ALTER TABLE job ADD active BOOLEAN DEFAULT FALSE']
+        stmts += ['ALTER TABLE validation RENAME COLUMN bonds TO bond_rmsd']
+        stmts += ['ALTER TABLE validation RENAME COLUMN bond_rmsd TO bonds']
+        stmts += ['ALTER TABLE fastrelaxparams DROP COLUMN sc_weights',
+                'ALTER TABLE fastrelaxparams ADD sc_weights VARCHAR DEFAULT \'R:0.76,K:0.76,E:0.76,'
+                'D:0.76,M:0.76,C:0.81,Q:0.81,H:0.81,N:0.81,T:0.81,S:0.81,Y:0.88,'
+                'W:0.88,A:0.88,F:0.88,P:0.88,I:0.88,L:0.88,V:0.88\'']
+        with self.engine.connect() as conn:
+            for stmt in stmts:
+                try:
+                    rs = conn.execute(stmt)
+                    logger.debug("Executed upgrade")
+                except Exception as e:
+                    logger.debug(e)
+                    #traceback.print_exc()

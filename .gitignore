@@ -10,3 +10,5 @@ rosem/torsion_restraints_gemmi.py
 *.pyc
 setup_deprec
 rosem/vis_chimerax.py
+rosem/templates/submission_script.j2
+rosem/gui_tmp.ui
