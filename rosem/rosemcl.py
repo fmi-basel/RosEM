@@ -35,6 +35,9 @@ import json
 
 logger = logging.getLogger("RosEM")
 
+class InputError(Exception):
+    pass
+
 class ExecPath:
     def __init__(self, logger):
         self.path_dict = {}
@@ -824,10 +827,10 @@ def get_cli_args():
         logger.info("No map file supplied. This will run FastRelax without density scoring.")
     if not map_file is None and args.resolution is None:
         logger.error("Resolution required.")
-        raise SystemExit
+        raise InputError("Resolution required.")
     if pdb_file is None:
         logger.error("No pdb file supplied.")
-        raise SystemExit
+        raise InputError("No pdb file supplied.")
 
     return args, unknown, map_file, pdb_file, cst_file, symm_file
 
@@ -849,28 +852,53 @@ def fastrelax_main(args, unknown, map_file, pdb_file, cst_file, symm_file):
         raise SystemExit
     except SystemExit as e:
         logger.error("Job finished with critical exceptions.")
+        logger.error(traceback.print_exc())
         if not args.log_file is None:
             with open(args.log_file, 'a') as f:
+                f.write(traceback.print_exc())
                 f.write("\nJob finished with exit code 1")
-        traceback.print_exc()
+
         raise SystemExit
     except Exception as e:
         logger.info("Job finished with non critical exceptions.")
+        logger.error(traceback.print_exc())
         if not args.log_file is None:
             with open(args.log_file, 'a') as f:
+                f.write(traceback.print_exc())
                 f.write("\nJob finished with exit code 1")
-            traceback.print_exc()
+                
+
 
 def main():
     __spec__ = None
-    args = get_cli_args()
+
+
+    stderr_handler = logging.StreamHandler(sys.stderr)
+    stderr_handler.setLevel(logging.ERROR)
+
+    formatter = logging.Formatter('%(levelname)s - %(message)s')
+    stderr_handler.setFormatter(formatter)
+
+    logger.addHandler(stderr_handler)
+
+    try:
+        args = get_cli_args()
+    except Exception:
+        logger.error(traceback.print_exc())
+        logger.error("\nJob finished with critical exceptions.")
+        
+        
+        raise SystemExit
+
 
     #logger.setLevel(logging.DEBUG)
-    print(args)
     if args[0].debug:
         logger.setLevel(logging.DEBUG)
     else:
         logger.setLevel(logging.INFO)
+
+
+    
     fastrelax_main(*args)
 
 

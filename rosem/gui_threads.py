@@ -327,7 +327,7 @@ class RunProcessThread(QObject):
                     self.change_tab.emit()
                     self.error.emit(error_msgs)
             else:
-                with Popen(cmd, preexec_fn=os.setsid) as p:
+                with Popen(cmd, preexec_fn=os.setsid, stderr=PIPE) as p:
                     cpid = p.pid
                     
                     logger.debug("PID of child is {}".format(cpid))
@@ -348,10 +348,18 @@ class RunProcessThread(QObject):
                     if not self.job_params['pid'] is None:
                         self._parent.job.update_pid(self.job_params['pid'], self.job_params['job_id'], self.sess)
                         self._parent.gui_params['pid'] = self.job_params['pid']
-                    logger.debug(f"Job started. emitting signals from run process thread. pid is {self.job_params['pid']} and status is {self.job_params['status']}")
-                    self.job_status.emit(self.job_params)
-                    self.change_tab.emit()
-                    self.error.emit(error_msgs)
+                        logger.debug(f"Job started. emitting signals from run process thread. pid is {self.job_params['pid']} and status is {self.job_params['status']}")
+                        self.job_status.emit(self.job_params)
+                        self.change_tab.emit()
+                    _, error = p.communicate()
+                    if not error is None:
+                        error = error.decode()
+                        if len(error) > 0:
+                            if not re.search("Job was aborted", error):
+                                error_msgs.append(f"Job failed because of the following error:\n\n{error}")
+                                self.error.emit(error_msgs)
+                                self.job_params['status'] = "error"
+                                self.job_status.emit(self.job_params)
         except:
             logger.debug("Could not start the job.")
             queue_job_id = None
