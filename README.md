@@ -22,7 +22,6 @@ Compatibility was tested against phenix v1.21.2 and rosetta v3.14.
 ```
 cd /some/directory/
 git clone https://github.com/fmi-basel/RosEM.git
-conda env create rosem-conda python=3.10
 conda activate rosem-conda
 cd RosEM
 python3 -m pip install .
@@ -40,7 +39,7 @@ Tested on Linux Ubuntu 18.x and MacOS BigSur
 
 Dependencies
 Python>=3.10
-Qt5
+Qt5 (v5.15)
 
 ```
 cd /some/folder

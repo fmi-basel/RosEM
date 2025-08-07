@@ -26,7 +26,6 @@ class PhenixToRosetta:
                     if start_of_block:
                         if re.match(".*pdb=\".*\"", line):
                             counter1 += 1
-                            print(line)
                             if re.match('.*pdb=\"\s*\w+\'*\s+\w+\s+\w{1}\s*-*\d+\s+\"', line):
                                 
                                 residue = re.match(".*pdb=\"\s*(\w+\'*)\s+\w+\s+(\w{1})\s*(-*\d+)\s+\"", line)
@@ -35,21 +34,17 @@ class PhenixToRosetta:
                                 if residue.group(1).replace(" ", "") == "OXT":
                                     continue
                             else:
-                                print("error")
                                 raise SystemExit
                         if re.match(".*([0-9\.e+-]+\s+){7}.*", line):
-                            #print("yes2")
                             counter2 += 1
                             params = re.match("\s+([0-9\.e+-]+)\s+.*", line)
                             angle = params.group(1)
                             dihedrals.append((residue_block, angle))
                             residue_block = []
                             start_of_block = False
-                            #print(dihedrals)
                     else:
                         continue
-            print(counter1 / 4)
-            print(counter2)
+
 
         with open("reference_model_restraints.cst","w+") as f:
             for dihedral in dihedrals:
@@ -58,7 +53,6 @@ class PhenixToRosetta:
                 dihedrals_rosetta = []
                 dihedrals_rosetta = ['Dihedral ']
                 for residue in residues:
-                    print(residue)
                     dihedrals_rosetta.append('{} {}{} '.format(residue[0], residue[2], residue[1]))
                 dihedrals_rosetta.append('CIRCULARHARMONIC {} 0.35\n'.format(angle))
                 dihedrals_rosetta = ''.join(dihedrals_rosetta)

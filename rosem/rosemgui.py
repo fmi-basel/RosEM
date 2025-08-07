@@ -453,7 +453,6 @@ class MainFrame(QtWidgets.QMainWindow):
 
             # Prepare Job
             self.fastrelaxparams.update_from_gui()
-            print(self.fastrelaxparams.__dict__)
             exec_messages = self.settings.check_executables(self.sess)
             logger.debug("EXEC messages")
             logger.debug(exec_messages)
