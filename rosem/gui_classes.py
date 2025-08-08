@@ -517,8 +517,8 @@ class Validation(GUIVariables):
                                      None,
                                      db=False,
                                      ctrl_type='tbl')
-        #self.weight = Variable('weight', 'int')
-        #self.reports.register(self.weight)
+        self.density_weight = Variable('density_weight', 'int')
+        self.reports.register(self.density_weight)
         self.bonds = Variable('bonds', 'float')
         self.reports.register(self.bonds)
         self.angles = Variable('angles', 'float')
@@ -553,14 +553,6 @@ class Validation(GUIVariables):
         self.reports.register(self.fsc)
         self.fsc_test = Variable('fsc_test', 'float')
         self.reports.register(self.fsc_test)
-        # self.cc_mask = Variable('cc_mask', 'float')
-        # self.reports.register(self.cc_mask)
-        # self.cc_volume = Variable('cc_volume', 'float')
-        # self.reports.register(self.cc_volume)
-        # self.cc_peaks = Variable('cc_peaks', 'float')
-        # self.reports.register(self.cc_peaks)
-        # self.cc_box = Variable('cc_box', 'float')
-        # self.reports.register(self.cc_box)
 
     def set_db(self, db):
         self.db = db
@@ -621,9 +613,9 @@ class Validation(GUIVariables):
             self.reports.ctrl.setRowCount(len(list(self.reports.report_dict.keys())))
             #self.reports.ctrl.setSelectionBehavior(QtWidgets.QTableView.SelectRows)
             #self.reports.ctrl.setSelectionMode(QtWidgets.QTableView.SingleSelection)
-            self.reports.ctrl.setHorizontalHeaderLabels(tuple(['Best model' for x in range(len(reports))]))
+            self.reports.ctrl.setHorizontalHeaderLabels(tuple([str(i+1) for i in range(len(reports))]))
             
-            label_mapping = {'weight': 'Rosetta density weight',
+            label_mapping = {'density_weight': 'Rosetta density weight',
                             'bonds': 'Bond length rmsd',
                             'angles': 'Bond angles rmsd',
                             'planarity': 'Planarity rmsd',
@@ -1554,7 +1546,7 @@ class Settings(GUIVariables):
     def check_executables(self, sess):
         messages = []
         settings = self.get_from_db(sess)
-        self.path = relax.ExecPath(logger)
+        self.path = relax.ExecPath()
         if not settings is None:
             if not settings.phenix_path == '':
                 self.path.register('phenix', settings.phenix_path)

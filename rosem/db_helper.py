@@ -204,6 +204,7 @@ class DBHelper:
         #stmts = ['ALTER TABLE settings ADD queue_submit_dialog BOOLEAN DEFAULT FALSE']
         stmts = ['ALTER TABLE settings ADD queue_jobid_regex VARCHAR DEFAULT NULL']
         stmts += ['ALTER TABLE settings ADD queue_account VARCHAR DEFAULT NULL']
+        stmts += ['ALTER TABLE validation ADD density_weight INTEGER DEFAULT NULL']
         stmts += ['ALTER TABLE job ADD active BOOLEAN DEFAULT FALSE']
         stmts += ['ALTER TABLE validation RENAME COLUMN bonds TO bond_rmsd']
         stmts += ['ALTER TABLE validation RENAME COLUMN bond_rmsd TO bonds']
