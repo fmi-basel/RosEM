@@ -89,37 +89,6 @@ class ResidueSelection:
         logger.debug(self.selection_string)
         return result
 
-
-
-    def parse_hierachy(self, lst, indices=[], prev_i=-1):
-        for i, item in enumerate(lst):
-            if i == 0:
-                indices.append(i)
-            logger.debug("Item: {}, Index: {}".format(item, i))
-            if isinstance(item, list):
-                indices[-1] = i
-                logger.debug("new indices list: {}".format(indices))
-                hierachy(item, indices)
-            else:
-                indices[-1] = i
-                if item in self.ops:
-                    logger.debug("True")
-
-                    new_indices = [x for x in indices]
-                    logger.debug("new indices ops: {}".format(new_indices))
-                    l_i = [x for x in indices]
-                    l_i[-1] = i - 1
-                    l_i = ''.join([str(x) for x in l_i])
-                    r_i = [x for x in indices]
-                    r_i[-1] = i + 1
-                    r_i = ''.join([str(x) for x in r_i])
-                    self.index_dict[''.join([str(x) for x in indices])] = [l_i, r_i]
-                else:
-                    logger.debug("indices list: {}".format(indices))
-            if i + 1 == len(lst):
-                indices.pop()
-            prev_i = i
-
     def replace_name(self, lst, indices=[], prev_i=-1):
         for i, item in enumerate(lst):
             if i == 0:
@@ -168,12 +137,6 @@ class ResidueSelection:
                 indices[-1] = i
                 if not item is None:
                     if item.lower() in self.ops:
-                        # l_i = [x for x in indices]
-                        # l_i[-1] = i - 1
-                        # l_i = ''.join([str(x) for x in l_i]) + '0'
-                        # r_i = [x for x in indices]
-                        # r_i[-1] = i + 1
-                        # r_i = ''.join([str(x) for x in r_i]) + '0'
                         logger.debug("All elements")
                         num_elements = len([x for x in lst if not x in self.ops])
                         all_elements = [''.join([str(x) for x in indices[:-1]]) + str(o) + '0' for o in range(0, (num_elements*2), 2)]
@@ -181,24 +144,19 @@ class ResidueSelection:
                         logger.debug(indices)
                         if item.lower() == 'and':
                             self.converted_lst.append(
-                               # ("And", selector_index[:-1], "{},{}".format(l_i, r_i), False)
-                                #"<And selector=\"{},{}\">".format(l_i, r_i)
                                 ("And", selector_index[:-1], ','.join(x for x in all_elements), False)
                             )
                             op_found = True
                         elif item.lower() == 'or':
                             self.converted_lst.append(
                                 ("Or", selector_index[:-1], ','.join(x for x in all_elements), False)
-                                #"<Or selector=\"{},{}\">".format(l_i, r_i)
                             )
                             op_found = True
                         else:
                             logger.debug("delete {}".format(i))
-                            #del lst[i]
             if i + 1 == len(lst):
                 indices.pop()
             prev_i = i
-
 
     def name_parser(self, name, selector_index):
         logger.debug("name parser")
@@ -209,31 +167,18 @@ class ResidueSelection:
             invert = False
         if re.match(".*resi\s{1}\w+$", name):
             resi = re.match(".*resi\s{1}(\w+)$", name).group(1)
-            #resi_selector = "<ResidueIndex name=\"{}\" resnums=\"{}\">".format(selector_index, resi)
-            #logger.debug(self.resi_selector)
             self.converted_lst.append(("Index", selector_index, resi, invert))
-            #return resi_selector
         elif re.match(".*resi\s{1}\w+-\w+", name):
             logger.debug("resi match")
             g = re.match(".*resi\s{1}(\w+)-(\w+)", name)
             resi_1, resi_2 = g.group(1), g.group(2)
-            #resi_selector = "<ResidueSpan name=\"{}\" resnums=\"{},{}\">".format(
-            #    selector_index, resi_1, resi_2)
             self.converted_lst.append(("Index", selector_index, "{}-{}".format(resi_1, resi_2), invert))
-            #logger.debug(resi_selector)
-            #return resi_selector
         elif re.match(".*resn\s{1}\w+", name):
             resn = re.match(".*resn\s{1}(\w+)", name).group(1)
-            #resn_selector = "<ResidueName name=\"{}\" residue_names=\"{}\">".format(selector_index, resn)
-            #logger.debug(resn_selector)
             self.converted_lst.append(("ResidueName", selector_index, resn, invert))
-            #return resn_selector
         elif re.match(".*chain\s{1}\w+", name):
             chain = re.match(".*chain\s{1}(\w+)", name).group(1)
-            #chain_selector = "<Chain name=\"{}\" chains=\"{}\">".format(selector_index, chain)
-            #logger.debug(chain_selector)
             self.converted_lst.append(("Chain", selector_index, chain, invert))
-            #return chain_selector
 
     def reorder_by_selector_index(self):
         prev_num = 0
