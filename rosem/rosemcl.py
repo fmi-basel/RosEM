@@ -32,14 +32,14 @@ from contextlib import closing
 from xml.dom import minidom
 import json
 
-
 logger = logging.getLogger("RosEM")
+logger.setLevel(logging.INFO)
 
 class InputError(Exception):
     pass
 
 class ExecPath:
-    def __init__(self, logger):
+    def __init__(self):
         self.path_dict = {}
         self.exec_path_dict = {}
 
@@ -227,19 +227,19 @@ class FastRelaxDensity:
         self._space_parser()
         #Static
         self.base_dir = os.getcwd()
-        self.path = ExecPath(logger)
+        self.path = ExecPath()
         self.path.register('phenix', phenix_path)
         self.path.register('rosetta', rosetta_path)
         self.path.set_exec('phenix', 'phenix.molprobity')
         self.path.set_exec('phenix', 'phenix.real_space_refine')
         self.path.set_exec('rosetta', 'rosetta_scripts', 'python|mpi|multistage')
-        if not self.logging_mode == 'file':
-            ch = logging.StreamHandler()
-            logger.addHandler(ch)
-        fh = logging.FileHandler(log_file)
-        logger.addHandler(fh)
 
-        self.run()
+
+        if log_file:
+            file_handler = logging.FileHandler(log_file)
+            logger.addHandler(file_handler)
+        stream_handler = logging.StreamHandler()
+        logger.addHandler(stream_handler)
 
     def run(self):
         logger.info("*** Starting pipeline ***")
@@ -470,7 +470,6 @@ class FastRelaxDensity:
                     p.communicate()
             except (KeyboardInterrupt, Exception) as e:
                 logger.error("Could not generate reference model restraints. Check reference_model.log for errors.", exc_info=True)
-                traceback.print_exc()
                 raise Exception
         
         else:
@@ -556,8 +555,7 @@ class FastRelaxDensity:
             raise KeyboardInterrupt
         except Exception as e:
             logger.error(f"Could not start task \"Density weight {wt}, Model {mdl}\".", exc_info=True)
-            traceback.print_exc()
-            raise SystemExit
+            raise Exception
 
         os.chdir(self.base_dir)
 
@@ -596,8 +594,6 @@ class FastRelaxDensity:
                             else:
                                 logger.error("Could not find models in job dir. Check log files for possible errors.")
                                 raise SystemExit
-                                traceback.print_exc()
-                                #raise Exception
                         elif self.ranking_method == "energy":
                             sc_file = [x for x in os.listdir(os.path.join(self.base_dir, dir)) if x.endswith('.sc')][0]
                             energy = self.validation.get_energy(os.path.join(dir, sc_file))
@@ -605,13 +601,16 @@ class FastRelaxDensity:
                             best_model = max(energy_vals, key=energy_vals.get)
                         logger.debug("Best model {}".format(best_model))
                         try:
-                            copyfile(os.path.join(dir, best_model), "best_model_w{}.pdb".format(wt))
-                            traceback.print_exc()
-                        except (KeyboardInterrupt) as e:
+                            best_model_name = "best_model_w{}.pdb".format(wt)
+                            copyfile(os.path.join(dir, best_model), best_model_name)
+                            logger.info(f"Best model copied to: {os.path.join(os.getcwd(), best_model_name)}")
+                        except KeyboardInterrupt as e:
                             logger.error("Could not copy best model.")
                             logger.debug(e, exc_info=True)
                             traceback.print_exc()
                             raise SystemExit
+                        except Exception as e:
+                            raise Exception
             if best_model is None:
                 logger.error("Collecting best model: No job directory found.")
                 raise SystemExit
@@ -638,7 +637,7 @@ class FastRelaxDensity:
             if not os.path.exists(job_dir):
                 os.mkdir(job_dir)
             else:
-                logger.warning(f"Job directory for weight {wt} already exists. Overwriting content.")
+                logger.info(f"Job directory for weight {wt} already exists. Overwriting content.")
             #Generate input xml
             os.chdir(job_dir)
             self._generate_xml(wt)
@@ -651,12 +650,7 @@ class FastRelaxDensity:
 
         with closing(Pool(self.nproc)) as pool:
             pool.starmap(self._run_relax, relax_list)
-        try:
-            self._select_best_model()
-        except KeyboardInterrupt:
-            raise KeyboardInterrupt
-        except Exception as e:
-            raise SystemExit
+        self._select_best_model()
 
 
 
@@ -688,7 +682,8 @@ class FastRelaxDensity:
                 except KeyboardInterrupt:
                     raise KeyboardInterrupt
                 except Exception as e:
-                    logger.error(traceback.print_exc())
+                    logger.error(f"Error during validation: {e}", exc_info=True)
+                    raise Exception
             else:
                 logger.error("No models found for validation.")
 
@@ -835,59 +830,27 @@ def get_cli_args():
     return args, unknown, map_file, pdb_file, cst_file, symm_file
 
 def fastrelax_main(args, unknown, map_file, pdb_file, cst_file, symm_file):
-    try:
-        FastRelaxDensity(map_file,
-                         pdb_file,
-                         cst_file,
-                         symm_file,
-                         **vars(args))
-        if not args.log_file is None:
-            with open(args.log_file, 'a') as f:
-                f.write("\nJob finished with exit code 0")
-    except KeyboardInterrupt:
-        logger.error("Job was aborted.")
-        if not args.log_file is None:
-            with open(args.log_file, 'a') as f:
-                f.write("\nJob finished with exit code 2")
-        raise SystemExit
-    except SystemExit as e:
-        logger.error("Job finished with critical exceptions.")
-        logger.error(traceback.print_exc())
-        if not args.log_file is None:
-            with open(args.log_file, 'a') as f:
-                f.write(traceback.print_exc())
-                f.write("\nJob finished with exit code 1")
+    FastRelaxDensity(map_file,
+                        pdb_file,
+                        cst_file,
+                        symm_file,
+                        **vars(args)).run()
 
-        raise SystemExit
-    except Exception as e:
-        logger.info("Job finished with non critical exceptions.")
-        logger.error(traceback.print_exc())
-        if not args.log_file is None:
-            with open(args.log_file, 'a') as f:
-                f.write(traceback.print_exc())
-                f.write("\nJob finished with exit code 1")
-                
+
+class MaxLevelFilter(logging.Filter):
+    def __init__(self, max_level):
+        self.max_level = max_level
+    def filter(self, record):
+        return record.levelno <= self.max_level             
 
 
 def main():
     __spec__ = None
 
-
-    stderr_handler = logging.StreamHandler(sys.stderr)
-    stderr_handler.setLevel(logging.ERROR)
-
-    formatter = logging.Formatter('%(levelname)s - %(message)s')
-    stderr_handler.setFormatter(formatter)
-
-    logger.addHandler(stderr_handler)
-
     try:
         args = get_cli_args()
     except Exception:
-        logger.error(traceback.print_exc())
-        logger.error("\nJob finished with critical exceptions.")
-        
-        
+        logger.error("\nJob finished with critical exceptions.", exc_info=True)
         raise SystemExit
 
 
@@ -898,8 +861,32 @@ def main():
         logger.setLevel(logging.INFO)
 
 
-    
-    fastrelax_main(*args)
+    try:
+        fastrelax_main(*args)
+        if args[0].log_file:
+            with open(args[0].log_file, 'a') as f:
+                f.write("\nJob finished with exit code 0")
+    except KeyboardInterrupt:
+        logger.error("Job was aborted.")
+        if args[0].log_file:
+            with open(args[0].log_file, 'a') as f:
+                f.write("\nJob finished with exit code 2")
+        raise SystemExit
+    except SystemExit as e:
+        logger.error("Job finished with critical exceptions.")
+        logger.error(traceback.print_exc())
+        if args[0].log_file:
+            with open(args[0].log_file, 'a') as f:
+                f.write(traceback.print_exc())
+                f.write("\nJob finished with exit code 1")
+        raise SystemExit
+    except Exception as e:
+        logger.info("Job finished with non critical exceptions.")
+        logger.error(traceback.print_exc())
+        if args[0].log_file:
+            with open(args[0].log_file, 'a') as f:
+                f.write(traceback.print_exc())
+                f.write("\nJob finished with exit code 1")
 
 
 if __name__ == '__main__':

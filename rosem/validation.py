@@ -48,7 +48,6 @@ def get_fsc_test(model):
                     pass
         return fsc
 
-
 @dataclass
 class Stats:
     bonds: Optional[float] = None
@@ -68,8 +67,6 @@ class Stats:
 def _get_validation_results(file):
     with open(file, 'r') as f:
         lines = f.readlines()
-    m = re.match(".*_w(\d+).*", file)
-    weight = m.group(1)
     stats_section = False
 
     stats = Stats()
@@ -77,7 +74,6 @@ def _get_validation_results(file):
         if re.search("Molprobity validation", line):
             stats_section = True
         if stats_section:
-            #print(line)
             if re.search("\s+Bond\s+", line):
                 stats.bonds = line.split()[2]
             elif re.search("Angle", line):
@@ -123,27 +119,34 @@ def _get_validation_results(file):
 def run_validation(model, exec_path, stage='post-ref'):
     cmd = [exec_path,
            model,
-           #map,
-           #'resolution={}'.format(resolution),
-           #'output.file_name=phenix_validation_{}_{}'.format(utils.get_filename(model), stage)
            ]
     logger.debug(cmd)
     validation_log = 'phenix_validation_{}_{}.log'.format(utils.get_filename(model), stage)
     with open(validation_log, 'w') as f:
-        p = Popen(' '.join(cmd), shell=True, stdin=PIPE, stdout=f)
-        p.communicate()
+        p = Popen(' '.join(cmd), shell=True, stdout=f, stderr=PIPE)
+        _, error = p.communicate()
+        if not error is None:
+            error = error.decode()
+            if len(error) > 0:
+                logger.error(f"The following error occured during validation:\n{error}")
+
     if os.path.exists(validation_log):
         stats = _get_validation_results(validation_log)
         fsc, fsc_resolution_low, fsc_resolution_high, fsc_mask =  get_fsc(model)
         fsc_test = get_fsc_test(model)
+        try:
+            weight = re.search(r'best_model_w(\d+).pdb', model).group(1)
+        except:
+            weight = "unk"
         stats['fsc_resolution'] = f"{fsc_resolution_high}-{fsc_resolution_low}"
         stats['fsc_mask'] = fsc_mask
         stats['fsc'] = fsc
         stats['fsc_test'] = fsc_test
+        stats['density_weight'] = weight
         return stats
     else:
         logger.debug("No validation output found.")
 
 
 if __name__ == '__main__':
-    print(run_validation(sys.argv[1], sys.argv[2]))
+    run_validation(sys.argv[1], sys.argv[2])

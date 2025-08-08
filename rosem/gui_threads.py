@@ -355,7 +355,7 @@ class RunProcessThread(QObject):
                     if not error is None:
                         error = error.decode()
                         if len(error) > 0:
-                            if not re.search("Job was aborted", error):
+                            if re.search(r"error|exception", error, re.IGNORECASE):
                                 error_msgs.append(f"Job failed because of the following error:\n\n{error}")
                                 self.error.emit(error_msgs)
                                 self.job_params['status'] = "error"
